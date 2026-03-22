@@ -1,10 +1,12 @@
 import "dotenv/config";
 
 import cors from "@fastify/cors";
+import swagger from "@fastify/swagger";
 import Fastify from "fastify";
 
 import { loadConfig } from "./config.js";
 import { prisma } from "./db/client.js";
+import { registerPrivateDocs } from "./plugins/privateDocs.js";
 import { gameRoutes } from "./routes/games.js";
 import { healthRoutes } from "./routes/health.js";
 import { GenerationService } from "./services/generationService.js";
@@ -18,6 +20,17 @@ async function buildServer() {
   const metrics = new ServiceMetrics(config);
 
   await app.register(cors, { origin: true });
+
+  await app.register(swagger, {
+    openapi: {
+      info: {
+        title: `${config.SERVICE_NAME} API`,
+        version: "0.1.0"
+      }
+    }
+  });
+
+  await registerPrivateDocs(app, config);
 
   const generationService = new GenerationService(config, {
     onModelStored: () => metrics.recordGenerationStored(),

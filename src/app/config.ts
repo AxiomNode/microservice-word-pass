@@ -1,5 +1,23 @@
 import { z } from "zod";
 
+const OptionalEnvString = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+  z.string().min(1).optional()
+);
+
+const EnvBoolean = z.preprocess((value) => {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "on"].includes(normalized)) {
+      return true;
+    }
+    if (["false", "0", "no", "off"].includes(normalized)) {
+      return false;
+    }
+  }
+  return value;
+}, z.boolean());
+
 const ConfigSchema = z.object({
   SERVICE_NAME: z.string().default("microservice-wordpass"),
   SERVICE_PORT: z.coerce.number().int().positive().default(7100),
@@ -12,6 +30,9 @@ const ConfigSchema = z.object({
   AI_ENGINE_API_KEY: z.string().min(1).optional(),
   AI_ENGINE_INGEST_API_KEY: z.string().min(1).optional(),
   AI_ENGINE_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5000).max(1800000).default(420000),
+  PRIVATE_DOCS_ENABLED: EnvBoolean.default(true),
+  PRIVATE_DOCS_PREFIX: z.string().default("/private/docs"),
+  PRIVATE_DOCS_TOKEN: OptionalEnvString,
   METRICS_LOG_BUFFER_SIZE: z.coerce.number().int().min(50).max(5000).default(500),
   BATCH_GENERATION_ENABLED: z.coerce.boolean().default(true),
   BATCH_GENERATION_INTERVAL_MINUTES: z.coerce.number().int().min(1).max(240).default(20),
@@ -32,5 +53,14 @@ export function loadConfig(): AppConfig {
   if (!parsed.success) {
     throw new Error();
   }
+
+  if (
+    parsed.data.PRIVATE_DOCS_ENABLED &&
+    !parsed.data.PRIVATE_DOCS_TOKEN &&
+    !parsed.data.AI_ENGINE_API_KEY
+  ) {
+    throw new Error("Private docs require PRIVATE_DOCS_TOKEN or AI_ENGINE_API_KEY");
+  }
+
   return parsed.data;
 }
