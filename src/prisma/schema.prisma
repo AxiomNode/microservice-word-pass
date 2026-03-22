@@ -1,0 +1,31 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model GameGeneration {
+  id           String   @id @default(cuid())
+  gameType     String
+  topic        String
+  topicKey      String?
+  query        String
+  language     String
+  status       String
+  categoryId    String?
+  categoryName  String?
+  uniquenessKey String?  @unique
+  batchRunId    String?
+  requestJson  String
+  responseJson String
+  createdAt    DateTime @default(now())
+
+  @@index([gameType, createdAt])
+  @@index([gameType, topicKey])
+  @@index([gameType, language, categoryId, createdAt])
+  @@index([gameType, categoryId, language])
+  @@unique([gameType, topicKey])
+}

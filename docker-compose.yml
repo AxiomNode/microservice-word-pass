@@ -1,0 +1,38 @@
+services:
+  wordpass-db:
+    image: postgres:16-alpine
+    container_name: microservice_wordpass_db_dev
+    environment:
+      POSTGRES_DB: wordpassdb
+      POSTGRES_USER: wordpass
+      POSTGRES_PASSWORD: wordpass
+    ports:
+      - "7433:5432"
+    volumes:
+      - wordpass_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wordpass -d wordpassdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  microservice-wordpass:
+    container_name: microservice_wordpass_dev
+    build:
+      context: ./src
+      dockerfile: Dockerfile
+    environment:
+      AI_ENGINE_BASE_URL: http://host.docker.internal:7001
+      DATABASE_URL: postgresql://wordpass:wordpass@wordpass-db:5432/wordpassdb?schema=public
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      wordpass-db:
+        condition: service_healthy
+    env_file:
+      - ./src/.env
+    ports:
+      - "7101:7100"
+
+volumes:
+  wordpass_db_data:

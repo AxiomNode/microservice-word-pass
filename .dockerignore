@@ -1,0 +1,9 @@
+.git
+.gitignore
+node_modules
+src/node_modules
+src/dist
+src/coverage
+.vscode
+.idea
+.env
