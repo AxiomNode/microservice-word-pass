@@ -26,6 +26,18 @@ npm run dev
 
 Default ai-engine endpoint configured by this service: `/generate/word-pass`.
 
+## Integracion En Nueva Arquitectura
+
+Este servicio pasa a ser un servicio de dominio interno en el modelo Gateway + BFF.
+
+- Entrada publica esperada: `api-gateway`.
+- Consumidores directos recomendados: `bff-mobile`, `bff-backoffice`.
+- Exposicion directa a internet: solo temporal durante la migracion.
+
+Contrato interno inicial publicado en:
+
+- `contracts-and-schemas/schemas/openapi/internal-microservice-wordpass.v1.yaml`
+
 ## API
 - GET /health
 - POST /games/generate

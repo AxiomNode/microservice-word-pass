@@ -31,6 +31,7 @@ services:
         condition: service_healthy
     env_file:
       - ./src/.env
+      - ./src/.env.secrets
     ports:
       - "7101:7100"
 

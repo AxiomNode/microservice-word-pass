@@ -12,6 +12,7 @@ src/dist/
 .env
 .env.*
 !.env.example
+src/.env.secrets
 
 # Database
 src/data/*.db
