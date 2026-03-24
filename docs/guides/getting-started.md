@@ -13,6 +13,14 @@ npm install
 cp .env.example .env
 ```
 
+Inject real secrets from private repository `secrets`:
+
+```bash
+node scripts/prepare-runtime-secrets.mjs dev
+```
+
+This generates `src/.env.secrets` for this service.
+
 3. Initialize database:
 
 ```bash
@@ -48,4 +56,4 @@ curl "http://localhost:7100/games/models/grouped"
 ## Fixed language policy
 
 - Active fixed languages: `es`, `en`, `fr`, `de`, `it`.
-- To add a new language later, edit [microservice-wordpass/src/app/services/triviaCategories.ts](microservice-wordpass/src/app/services/triviaCategories.ts) and restart/rebuild.
+- To add a new language later, edit `shared-sdk-client/typescript/src/trivia-categories.ts` and then restart/rebuild.

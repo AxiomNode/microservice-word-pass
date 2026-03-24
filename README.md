@@ -24,7 +24,21 @@ npm run db:push
 npm run dev
 ```
 
+`.env.example` contiene placeholders. Para inyectar secretos reales en `src/.env.secrets`, ejecutar desde el repositorio privado `secrets`:
+
+```bash
+node scripts/prepare-runtime-secrets.mjs dev
+```
+
 Default ai-engine endpoint configured by this service: `/generate/word-pass`.
+
+## Shared modules
+
+Este servicio consume modulos compartidos de `@axiomnode/shared-sdk-client`:
+
+- `src/app/services/aiEngineClient.ts` re-exporta `@axiomnode/shared-sdk-client/ai-engine-client`.
+- `src/app/services/triviaCategories.ts` re-exporta `@axiomnode/shared-sdk-client/trivia-categories`.
+- `src/app/plugins/privateDocs.ts` delega en `@axiomnode/shared-sdk-client/private-docs`.
 
 ## Integracion En Nueva Arquitectura
 
@@ -117,8 +131,8 @@ The workflow runs build, tests, lint, production audit and docker smoke checks f
 - Generation outside these dimensions is rejected at API and service level.
 
 ## How to add more languages later
-1. Add the language entry in [microservice-wordpass/src/app/services/triviaCategories.ts](microservice-wordpass/src/app/services/triviaCategories.ts).
-2. Rebuild the service to refresh strict API validation enums.
+1. Language catalog is centralized in `shared-sdk-client/typescript/src/trivia-categories.ts`.
+2. Rebuild shared SDK and then rebuild this service to refresh strict API validation enums.
 3. Keep two-letter codes and update clients that call /games/generate or /games/models/random.
 
 ## Docker Compose
