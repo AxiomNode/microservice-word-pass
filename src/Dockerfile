@@ -19,7 +19,11 @@ RUN apt-get update \
 COPY --from=deps /workspace/microservice-wordpass/src/node_modules ./node_modules
 COPY --from=deps /workspace/shared-sdk-client/typescript /workspace/shared-sdk-client/typescript
 COPY --from=deps /workspace/shared-sdk-client/typescript /shared-sdk-client/typescript
-COPY microservice-wordpass/src .
+COPY microservice-wordpass/src/package.json ./package.json
+COPY microservice-wordpass/src/tsconfig*.json ./
+COPY microservice-wordpass/src/.env.example ./.env.example
+COPY microservice-wordpass/src/prisma ./prisma
+COPY microservice-wordpass/src/app ./app
 RUN npm run db:generate && npm run build
 
 FROM node:20-bookworm-slim AS runtime
