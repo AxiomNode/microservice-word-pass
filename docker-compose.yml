@@ -19,8 +19,8 @@ services:
   microservice-wordpass:
     container_name: microservice_wordpass_dev
     build:
-      context: ./src
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: microservice-wordpass/src/Dockerfile
     environment:
       AI_ENGINE_BASE_URL: http://host.docker.internal:7001
       DATABASE_URL: postgresql://wordpass:wordpass@wordpass-db:5432/wordpassdb?schema=public
