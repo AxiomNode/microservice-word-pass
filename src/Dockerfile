@@ -6,6 +6,7 @@ RUN apt-get update \
 WORKDIR /workspace/microservice-wordpass/src
 COPY microservice-wordpass/src/package.json microservice-wordpass/src/package-lock.json* ./
 COPY shared-sdk-client/typescript /workspace/shared-sdk-client/typescript
+COPY contracts-and-schemas /workspace/contracts-and-schemas
 RUN npm install
 
 FROM node:20-bookworm-slim AS build
