@@ -42,6 +42,14 @@ export interface GenerateInput {
   letters?: string;
 }
 
+export interface ManualModelInput {
+  categoryId: string;
+  language: string;
+  difficultyPercentage: number;
+  content: Record<string, unknown>;
+  status?: "manual" | "validated";
+}
+
 export interface GenerationProcessInput extends GenerateInput {
   count: number;
 }
@@ -233,7 +241,7 @@ export class GenerationService {
     const category = this.getCategoryOrThrow(input.categoryId);
     const language = this.getLanguageOrThrow(input.language);
 
-    const resolved = this.buildResolvedInput(0, category, language);
+    const resolved = this.buildResolvedInput(Math.floor(Math.random() * 10_000), category, language);
     const result = await this.generateAndStoreWithResult({
       ...resolved,
       difficultyPercentage: input.difficultyPercentage,
@@ -242,6 +250,60 @@ export class GenerationService {
     });
 
     return result.responsePayload;
+  }
+
+  async storeManualModel(input: ManualModelInput): Promise<StoredGameModel> {
+    const category = this.getCategoryOrThrow(input.categoryId);
+    const language = this.getLanguageOrThrow(input.language);
+    const difficulty = Math.max(0, Math.min(100, Math.trunc(input.difficultyPercentage)));
+
+    const normalizedContent = this.normalizeManualContent(input.content);
+    const topic = `${category.name} | manual | ${language} | d${difficulty}`;
+    const query = `${category.name} manual curation ${language} difficulty ${difficulty}`;
+    const topicKey = this.normalizeTopicKey(topic, language);
+    const uniquenessKey = this.buildUniquenessKey("word-pass", normalizedContent, language);
+
+    const existing = await prisma.gameGeneration.findFirst({
+      where: { uniquenessKey },
+      select: { id: true },
+    });
+
+    if (existing) {
+      throw new Error("Duplicate content");
+    }
+
+    const created = await prisma.gameGeneration.create({
+      data: {
+        gameType: "word-pass",
+        topic,
+        topicKey,
+        query,
+        language,
+        status: input.status ?? "manual",
+        categoryId: category.id,
+        categoryName: category.name,
+        uniquenessKey,
+        requestJson: JSON.stringify({
+          source: "backoffice-manual",
+          categoryId: category.id,
+          language,
+          difficulty_percentage: difficulty,
+        }),
+        responseJson: JSON.stringify(normalizedContent),
+      },
+    });
+
+    return this.mapStoredModel(created);
+  }
+
+  async deleteHistoryItem(id: string): Promise<boolean> {
+    const deleted = await prisma.gameGeneration.deleteMany({
+      where: {
+        id,
+        gameType: "word-pass",
+      },
+    });
+    return deleted.count > 0;
   }
 
   startGenerationProcess(input: GenerationProcessInput): GenerationProcessSnapshot {
@@ -582,7 +644,7 @@ export class GenerationService {
       numQuestions,
       letters,
       topic: `${category.name} - ${variant} - ${frame}`,
-      query: `${category.name} ${variant} ${frame} word-pass ${language}`
+      query: `${category.name} ${variant} ${frame} word-pass ${language} evitar respuestas ambiguas o sin sentido`
     };
   }
 
@@ -731,6 +793,21 @@ export class GenerationService {
     } catch {
       return value;
     }
+  }
+
+  private normalizeManualContent(content: Record<string, unknown>): Record<string, unknown> {
+    const entries = Object.entries(content).filter(([, value]) => value !== null && value !== undefined);
+    if (entries.length === 0) {
+      throw new Error("Invalid content payload");
+    }
+
+    const compact = Object.fromEntries(entries);
+    const serialized = this.stableStringify(compact);
+    if (serialized.length < 8) {
+      throw new Error("Invalid content payload");
+    }
+
+    return compact;
   }
 
   private normalizeTopicKey(topic: string, language: string): string {

@@ -42,6 +42,20 @@ const GenerationProcessQuerySchema = z.object({
   includeItems: z.coerce.boolean().default(false)
 });
 
+const ManualHistoryEntrySchema = z.object({
+  categoryId: z.string().min(1),
+  language: z.string().min(2).max(5),
+  difficultyPercentage: z.coerce.number().int().min(0).max(100),
+  content: z.record(z.unknown()).refine((value) => Object.keys(value).length > 0, {
+    message: "content must include at least one field"
+  }),
+  status: z.enum(["manual", "validated"]).default("manual")
+});
+
+const HistoryItemParamsSchema = z.object({
+  entryId: z.string().min(1)
+});
+
 export async function gameRoutes(
   app: FastifyInstance,
   generationService: GenerationService,
@@ -179,6 +193,52 @@ export async function gameRoutes(
     const limit = limitRaw ? Number(limitRaw) : 20;
     const items = await generationService.history(Number.isNaN(limit) ? 20 : limit);
     return reply.send({ gameType: "word-pass", items });
+  });
+
+  app.post("/games/history/manual", async (request, reply) => {
+    const parsed = ManualHistoryEntrySchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.status(400).send({
+        message: "Invalid payload",
+        errors: parsed.error.flatten()
+      });
+    }
+
+    try {
+      const item = await generationService.storeManualModel(parsed.data);
+      return reply.status(201).send({
+        gameType: "word-pass",
+        item
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      const statusCode = /duplicate/i.test(message) ? 409 : 400;
+      return reply.status(statusCode).send({
+        message: "Failed to store manual model",
+        error: message
+      });
+    }
+  });
+
+  app.delete("/games/history/:entryId", async (request, reply) => {
+    const parsed = HistoryItemParamsSchema.safeParse(request.params ?? {});
+    if (!parsed.success) {
+      return reply.status(400).send({
+        message: "Invalid path parameters",
+        errors: parsed.error.flatten()
+      });
+    }
+
+    const deleted = await generationService.deleteHistoryItem(parsed.data.entryId);
+    if (!deleted) {
+      return reply.status(404).send({ message: "History entry not found" });
+    }
+
+    return reply.send({
+      gameType: "word-pass",
+      deleted: true,
+      id: parsed.data.entryId
+    });
   });
 
   app.get("/games/models/grouped", async (_request, reply) => {
