@@ -2,6 +2,10 @@
 
 TypeScript microservice that requests **word-pass** generation from **ai-engine** and persists generated sessions in a database.
 
+## Responsabilidad principal
+
+- Generacion y persistencia de contenido wordpass con control de duplicados.
+
 ## Stack
 - Runtime: Node.js 20+
 - Framework: Fastify
