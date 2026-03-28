@@ -71,15 +71,20 @@ export async function gameRoutes(
     }
 
     try {
+      generationService.assertAiGenerationAvailable();
       const result = await generationService.generateAndStore(parsed.data);
       return reply.status(201).send({
         gameType: "word-pass",
         generated: result
       });
     } catch (error) {
-      return reply.status(502).send({
-        message: "Failed to generate content from ai-engine",
-        error: error instanceof Error ? error.message : "Unknown error"
+      const message = error instanceof Error ? error.message : "Unknown error";
+      const circuitOpen = /ai auth circuit open/i.test(message);
+      return reply.status(circuitOpen ? 503 : 502).send({
+        message: circuitOpen
+          ? "Generation temporarily unavailable due to AI authentication failures"
+          : "Failed to generate content from ai-engine",
+        error: message
       });
     }
   });
@@ -90,6 +95,16 @@ export async function gameRoutes(
       return reply.status(400).send({
         message: "Invalid payload",
         errors: parsed.error.flatten()
+      });
+    }
+
+    try {
+      generationService.assertAiGenerationAvailable();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      return reply.status(503).send({
+        message: "Generation temporarily unavailable due to AI authentication failures",
+        error: message
       });
     }
 

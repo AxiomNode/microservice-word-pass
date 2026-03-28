@@ -36,6 +36,7 @@ async function buildServer() {
     onModelStored: () => metrics.recordGenerationStored(),
     onModelDuplicate: (reason) => metrics.recordGenerationDuplicate(reason),
     onModelFailed: () => metrics.recordGenerationFailed(),
+    onAiAuthCircuitStateChanged: (state) => metrics.recordAiAuthCircuitState(state),
     onProcessStarted: ({ requested }) => metrics.recordGenerationProcessStarted(requested),
     onProcessCompleted: (snapshot) => metrics.recordGenerationProcessCompleted(snapshot),
     onBatchCompleted: (result) => metrics.recordBatch(result),

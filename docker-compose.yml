@@ -23,6 +23,7 @@ services:
       dockerfile: microservice-wordpass/src/Dockerfile
     environment:
       AI_ENGINE_BASE_URL: http://host.docker.internal:7001
+      AI_ENGINE_API_KEY: dev_games_test_key_2026
       DATABASE_URL: postgresql://wordpass:wordpass@wordpass-db:5432/wordpassdb?schema=public
     extra_hosts:
       - "host.docker.internal:host-gateway"

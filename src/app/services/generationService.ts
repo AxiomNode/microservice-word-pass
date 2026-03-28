@@ -24,10 +24,20 @@ export interface CatalogSnapshot {
   updatedAt: string;
 }
 
+export interface AiAuthCircuitSnapshot {
+  open: boolean;
+  failureStreak: number;
+  failureThreshold: number;
+  openedUntil?: string;
+  cooldownMs: number;
+  openedTotal: number;
+}
+
 export interface GenerationServiceObserver {
   onModelStored?: () => void;
   onModelDuplicate?: (reason: "topic" | "content") => void;
   onModelFailed?: () => void;
+  onAiAuthCircuitStateChanged?: (state: AiAuthCircuitSnapshot) => void;
   onProcessStarted?: (payload: { taskId: string; requested: number }) => void;
   onProcessCompleted?: (snapshot: GenerationProcessSnapshot) => void;
   onBatchCompleted?: (result: BatchGenerationResult) => void;
@@ -194,6 +204,11 @@ export class GenerationService {
   private readonly client: AiEngineClient;
   private readonly generationProcesses = new Map<string, GenerationProcessTask>();
   private readonly generationProcessRetentionLimit = 200;
+  private readonly aiAuthFailureThreshold: number;
+  private readonly aiAuthCircuitCooldownMs: number;
+  private aiAuthFailureStreak = 0;
+  private aiAuthCircuitOpenedUntilMs = 0;
+  private aiAuthCircuitOpenedTotal = 0;
   private categories: { id: string; name: string }[] = [...TRIVIA_CATEGORIES];
   private languages: { code: string; name: string }[] = [...SUPPORTED_LANGUAGES];
   private categoryById = new Map(TRIVIA_CATEGORY_BY_ID);
@@ -205,6 +220,8 @@ export class GenerationService {
     private readonly config: AppConfig,
     private readonly observer?: GenerationServiceObserver
   ) {
+    this.aiAuthFailureThreshold = config.AI_AUTH_CIRCUIT_FAILURE_THRESHOLD;
+    this.aiAuthCircuitCooldownMs = config.AI_AUTH_CIRCUIT_COOLDOWN_MS;
     this.client = new AiEngineClient(config, {
       onOutboundRequest: (metric) => this.observer?.onOutboundRequest?.(metric)
     });
@@ -212,7 +229,9 @@ export class GenerationService {
 
   async refreshCatalogs(): Promise<CatalogSnapshot> {
     try {
+      this.ensureAiAuthCircuitClosed();
       const payload = await this.client.getCatalogs();
+      this.registerAiAuthSuccess();
       this.categories = payload.categories;
       this.languages = payload.languages;
       this.categoryById = new Map(payload.categories.map((item) => [item.id, item] as const));
@@ -221,11 +240,43 @@ export class GenerationService {
       );
       this.catalogSource = "ai-engine";
       this.catalogUpdatedAt = new Date().toISOString();
-    } catch {
+    } catch (error) {
+      this.registerAiAuthFailure(error);
       this.catalogSource = "local-fallback";
       this.catalogUpdatedAt = new Date().toISOString();
     }
     return this.getCatalogSnapshot();
+  }
+
+  async runAiAuthSmokeCheck(): Promise<{ ok: true } | { ok: false; reason: string }> {
+    try {
+      this.ensureAiAuthCircuitClosed();
+      await this.client.getCatalogs();
+      this.registerAiAuthSuccess();
+      return { ok: true };
+    } catch (error) {
+      this.registerAiAuthFailure(error);
+      return {
+        ok: false,
+        reason: error instanceof Error ? error.message : "Unknown ai-engine error"
+      };
+    }
+  }
+
+  assertAiGenerationAvailable(): void {
+    this.ensureAiAuthCircuitClosed();
+  }
+
+  getAiAuthCircuitSnapshot(): AiAuthCircuitSnapshot {
+    const open = this.aiAuthCircuitOpenedUntilMs > Date.now();
+    return {
+      open,
+      failureStreak: this.aiAuthFailureStreak,
+      failureThreshold: this.aiAuthFailureThreshold,
+      ...(open ? { openedUntil: new Date(this.aiAuthCircuitOpenedUntilMs).toISOString() } : {}),
+      cooldownMs: this.aiAuthCircuitCooldownMs,
+      openedTotal: this.aiAuthCircuitOpenedTotal
+    };
   }
 
   getCatalogSnapshot(): CatalogSnapshot {
@@ -383,8 +434,12 @@ export class GenerationService {
             } else {
               duplicates += 1;
             }
-          } catch {
+          } catch (error) {
             failed += 1;
+            if (this.isAiAuthCircuitOpenError(error)) {
+              attempts = maxAttempts;
+              break;
+            }
           }
         }
       })()
@@ -698,7 +753,18 @@ export class GenerationService {
       }
     }
 
-    const responsePayload = await this.client.generate(requestPayload);
+    this.ensureAiAuthCircuitClosed();
+
+    let responsePayload: unknown;
+    try {
+      responsePayload = await this.client.generate(requestPayload);
+      this.registerAiAuthSuccess();
+    } catch (error) {
+      this.registerAiAuthFailure(error);
+      this.observer?.onModelFailed?.();
+      throw error;
+    }
+
     const uniquenessKey = this.buildUniquenessKey("word-pass", responsePayload, language);
 
     const existingContent = await prisma.gameGeneration.findFirst({
@@ -860,5 +926,67 @@ export class GenerationService {
       throw new Error(`Unsupported language: ${language}`);
     }
     return normalized;
+  }
+
+  private ensureAiAuthCircuitClosed(): void {
+    if (this.aiAuthCircuitOpenedUntilMs <= 0) {
+      return;
+    }
+
+    if (Date.now() >= this.aiAuthCircuitOpenedUntilMs) {
+      this.aiAuthCircuitOpenedUntilMs = 0;
+      this.aiAuthFailureStreak = 0;
+      this.emitAiAuthCircuitState();
+      return;
+    }
+
+    throw new Error(
+      `AI auth circuit open until ${new Date(this.aiAuthCircuitOpenedUntilMs).toISOString()}`
+    );
+  }
+
+  private registerAiAuthSuccess(): void {
+    const hasChanges = this.aiAuthFailureStreak > 0 || this.aiAuthCircuitOpenedUntilMs > 0;
+    this.aiAuthFailureStreak = 0;
+    this.aiAuthCircuitOpenedUntilMs = 0;
+    if (hasChanges) {
+      this.emitAiAuthCircuitState();
+    }
+  }
+
+  private registerAiAuthFailure(error: unknown): void {
+    const statusCode = this.extractAiEngineStatusCode(error);
+    if (statusCode !== 401 && statusCode !== 403) {
+      return;
+    }
+
+    this.aiAuthFailureStreak += 1;
+    if (this.aiAuthFailureStreak >= this.aiAuthFailureThreshold) {
+      this.aiAuthCircuitOpenedUntilMs = Date.now() + this.aiAuthCircuitCooldownMs;
+      this.aiAuthCircuitOpenedTotal += 1;
+    }
+    this.emitAiAuthCircuitState();
+  }
+
+  private emitAiAuthCircuitState(): void {
+    this.observer?.onAiAuthCircuitStateChanged?.(this.getAiAuthCircuitSnapshot());
+  }
+
+  private extractAiEngineStatusCode(error: unknown): number | null {
+    if (!(error instanceof Error)) {
+      return null;
+    }
+
+    const match = error.message.match(/ai-engine error\s+(\d{3})/i);
+    if (!match) {
+      return null;
+    }
+
+    const statusCode = Number(match[1]);
+    return Number.isFinite(statusCode) ? statusCode : null;
+  }
+
+  private isAiAuthCircuitOpenError(error: unknown): boolean {
+    return error instanceof Error && /ai auth circuit open/i.test(error.message);
   }
 }

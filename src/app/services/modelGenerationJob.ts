@@ -51,6 +51,19 @@ export class ModelGenerationJob {
     const startedAt = Date.now();
 
     try {
+      const smoke = await this.generationService.runAiAuthSmokeCheck();
+      if (!smoke.ok) {
+        logger.error(
+          {
+            trigger,
+            durationMs: Date.now() - startedAt,
+            reason: smoke.reason
+          },
+          "Skipping periodic generation cycle because AI auth smoke check failed"
+        );
+        return;
+      }
+
       const catalogs = await this.generationService.refreshCatalogs();
       const result = await this.generationService.generateBatchModels();
       logger.info(

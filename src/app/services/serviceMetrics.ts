@@ -9,6 +9,15 @@ interface LogEvent {
   context?: Record<string, unknown>;
 }
 
+interface AiAuthCircuitState {
+  open: boolean;
+  failureStreak: number;
+  failureThreshold: number;
+  openedUntil?: string;
+  cooldownMs: number;
+  openedTotal: number;
+}
+
 export class ServiceMetrics {
   private readonly startedAt = Date.now();
   private readonly routeCounters = new Map<string, number>();
@@ -45,6 +54,12 @@ export class ServiceMetrics {
   private responseBytesOutTotal = 0;
   private outboundRequestBytesTotal = 0;
   private outboundResponseBytesTotal = 0;
+  private aiAuthCircuitOpen = false;
+  private aiAuthFailureStreak = 0;
+  private aiAuthFailureThreshold = 0;
+  private aiAuthCircuitOpenedUntil: string | null = null;
+  private aiAuthCircuitCooldownMs = 0;
+  private aiAuthCircuitOpenedTotal = 0;
 
   constructor(private readonly config: AppConfig) {}
 
@@ -159,6 +174,15 @@ export class ServiceMetrics {
     this.pushLog(level, message, context);
   }
 
+  recordAiAuthCircuitState(state: AiAuthCircuitState): void {
+    this.aiAuthCircuitOpen = state.open;
+    this.aiAuthFailureStreak = state.failureStreak;
+    this.aiAuthFailureThreshold = state.failureThreshold;
+    this.aiAuthCircuitOpenedUntil = state.openedUntil ?? null;
+    this.aiAuthCircuitCooldownMs = state.cooldownMs;
+    this.aiAuthCircuitOpenedTotal = state.openedTotal;
+  }
+
   snapshot() {
     const generationAttemptsTotal =
       this.generatedStoredTotal + this.generatedDuplicateTotal + this.generatedFailedTotal;
@@ -213,6 +237,14 @@ export class ServiceMetrics {
         duplicateTopicTotal: this.generationProcessesDuplicateTopicTotal,
         duplicateContentTotal: this.generationProcessesDuplicateContentTotal,
         onlyDuplicatesTotal: this.generationProcessesOnlyDuplicatesTotal
+      },
+      aiAuthCircuit: {
+        open: this.aiAuthCircuitOpen,
+        failureStreak: this.aiAuthFailureStreak,
+        failureThreshold: this.aiAuthFailureThreshold,
+        openedUntil: this.aiAuthCircuitOpenedUntil,
+        cooldownMs: this.aiAuthCircuitCooldownMs,
+        openedTotal: this.aiAuthCircuitOpenedTotal
       },
       requestsByRoute: Array.from(this.routeCounters.entries()).map(([key, total]) => {
         const [method, route, statusCode] = key.split("|");
@@ -331,6 +363,18 @@ export class ServiceMetrics {
     lines.push("# HELP microservice_outbound_response_bytes_total Total outbound response bytes");
     lines.push("# TYPE microservice_outbound_response_bytes_total counter");
     lines.push(`microservice_outbound_response_bytes_total ${this.outboundResponseBytesTotal}`);
+
+    lines.push("# HELP microservice_ai_auth_circuit_open AI auth circuit state (1=open, 0=closed)");
+    lines.push("# TYPE microservice_ai_auth_circuit_open gauge");
+    lines.push(`microservice_ai_auth_circuit_open ${this.aiAuthCircuitOpen ? 1 : 0}`);
+
+    lines.push("# HELP microservice_ai_auth_failure_streak Current consecutive AI auth failures (401/403)");
+    lines.push("# TYPE microservice_ai_auth_failure_streak gauge");
+    lines.push(`microservice_ai_auth_failure_streak ${this.aiAuthFailureStreak}`);
+
+    lines.push("# HELP microservice_ai_auth_circuit_opened_total Total AI auth circuit openings");
+    lines.push("# TYPE microservice_ai_auth_circuit_opened_total counter");
+    lines.push(`microservice_ai_auth_circuit_opened_total ${this.aiAuthCircuitOpenedTotal}`);
 
     return lines.join("\n");
   }

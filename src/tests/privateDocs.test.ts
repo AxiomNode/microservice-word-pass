@@ -24,6 +24,8 @@ function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     AI_ENGINE_API_KEY: "fallback_token",
     AI_ENGINE_INGEST_API_KEY: "bridge_token",
     AI_ENGINE_REQUEST_TIMEOUT_MS: 420000,
+    AI_AUTH_CIRCUIT_FAILURE_THRESHOLD: 3,
+    AI_AUTH_CIRCUIT_COOLDOWN_MS: 300000,
     PRIVATE_DOCS_ENABLED: true,
     PRIVATE_DOCS_PREFIX: "/private/docs",
     PRIVATE_DOCS_TOKEN: "private_token",

@@ -30,6 +30,8 @@ const ConfigSchema = z.object({
   AI_ENGINE_API_KEY: z.string().min(1).optional(),
   AI_ENGINE_INGEST_API_KEY: z.string().min(1).optional(),
   AI_ENGINE_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5000).max(1800000).default(420000),
+  AI_AUTH_CIRCUIT_FAILURE_THRESHOLD: z.coerce.number().int().min(2).max(20).default(3),
+  AI_AUTH_CIRCUIT_COOLDOWN_MS: z.coerce.number().int().min(10000).max(3600000).default(300000),
   PRIVATE_DOCS_ENABLED: EnvBoolean.default(true),
   PRIVATE_DOCS_PREFIX: z.string().default("/private/docs"),
   PRIVATE_DOCS_TOKEN: OptionalEnvString,
