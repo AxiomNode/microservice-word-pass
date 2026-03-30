@@ -973,6 +973,27 @@ export class GenerationService {
   }
 
   private sanitizeGeneratedPayload(payload: unknown): unknown {
+    if (!payload || typeof payload !== "object") {
+      throw new Error("Generated payload is not a valid object");
+    }
+    const obj = payload as Record<string, unknown>;
+    const game = (obj.game ?? obj) as Record<string, unknown>;
+    const words = game.words;
+    if (!Array.isArray(words) || words.length === 0) {
+      throw new Error("Generated word-pass has no words — rejecting incomplete content");
+    }
+    for (let i = 0; i < words.length; i++) {
+      const w = words[i] as Record<string, unknown>;
+      if (!w.letter || typeof w.letter !== "string") {
+        throw new Error(`Word ${i} is missing the 'letter' field`);
+      }
+      if (!w.hint || typeof w.hint !== "string") {
+        throw new Error(`Word ${i} is missing the 'hint' field`);
+      }
+      if (!w.answer || typeof w.answer !== "string") {
+        throw new Error(`Word ${i} is missing the 'answer' field`);
+      }
+    }
     return payload;
   }
 
