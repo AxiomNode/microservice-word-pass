@@ -12,9 +12,9 @@ import {
 import {
   SUPPORTED_LANGUAGES,
   SUPPORTED_LANGUAGE_BY_CODE,
-  TRIVIA_CATEGORIES,
-  TRIVIA_CATEGORY_BY_ID,
-  TriviaCategory
+  GAME_CATEGORIES,
+  GAME_CATEGORY_BY_ID,
+  GameCategory
 } from "./triviaCategories.js";
 
 export interface CatalogSnapshot {
@@ -35,7 +35,7 @@ export interface AiAuthCircuitSnapshot {
 
 export interface GenerationServiceObserver {
   onModelStored?: () => void;
-  onModelDuplicate?: (reason: "topic" | "content") => void;
+  onModelDuplicate?: (reason: "content") => void;
   onModelFailed?: () => void;
   onAiAuthCircuitStateChanged?: (state: AiAuthCircuitSnapshot) => void;
   onProcessStarted?: (payload: { taskId: string; requested: number }) => void;
@@ -50,6 +50,7 @@ export interface GenerateInput {
   difficultyPercentage?: number;
   numQuestions?: number;
   letters?: string;
+  requestedBy?: "api" | "backoffice";
 }
 
 export interface ManualModelInput {
@@ -66,13 +67,13 @@ export interface GenerationProcessInput extends GenerateInput {
 
 export interface GenerationProcessSnapshot {
   taskId: string;
+  requestedBy: "api" | "backoffice";
   status: "running" | "completed" | "failed";
   requested: number;
   processed: number;
   created: number;
   duplicates: number;
   duplicateReasons: {
-    topic: number;
     content: number;
   };
   failed: number;
@@ -89,7 +90,6 @@ export interface GenerationProcessSnapshot {
 }
 
 interface ResolvedGenerateInput extends GenerateInput {
-  topic: string;
   query: string;
 }
 
@@ -97,9 +97,16 @@ export interface RandomModelsFilters {
   count: number;
   categoryId?: string;
   language?: string;
+  difficultyPercentage?: number;
   status?: string;
   createdAfter?: Date;
   createdBefore?: Date;
+}
+
+export interface HistoryFilters {
+  categoryId?: string;
+  language?: string;
+  difficultyPercentage?: number;
 }
 
 export interface GroupedModelsSummary {
@@ -124,19 +131,18 @@ interface BatchGenerationOptions {
 
 interface GenerateAndStoreResult {
   stored: boolean;
-  duplicateReason?: "topic" | "content";
+  duplicateReason?: "content";
   responsePayload: unknown;
 }
 
 interface GenerateStoreMetadata {
-  category?: TriviaCategory;
+  category?: GameCategory;
   batchRunId?: string;
 }
 
 interface StoredGameModel {
   id: string;
   gameType: string;
-  topic: string;
   query: string;
   language: string;
   status: string;
@@ -149,12 +155,12 @@ interface StoredGameModel {
 
 interface GenerationProcessTask {
   taskId: string;
+  requestedBy: "api" | "backoffice";
   status: "running" | "completed" | "failed";
   requested: number;
   processed: number;
   created: number;
   duplicates: number;
-  duplicateByTopic: number;
   duplicateByContent: number;
   failed: number;
   startedAt: string;
@@ -164,7 +170,7 @@ interface GenerationProcessTask {
   errors: string[];
 }
 
-const TOPIC_VARIANTS = [
+const PROMPT_VARIANTS = [
   "fundamentos",
   "curiosidades",
   "personajes clave",
@@ -209,12 +215,14 @@ export class GenerationService {
   private aiAuthFailureStreak = 0;
   private aiAuthCircuitOpenedUntilMs = 0;
   private aiAuthCircuitOpenedTotal = 0;
-  private categories: { id: string; name: string }[] = [...TRIVIA_CATEGORIES];
+  private categories: { id: string; name: string }[] = [...GAME_CATEGORIES];
   private languages: { code: string; name: string }[] = [...SUPPORTED_LANGUAGES];
-  private categoryById = new Map(TRIVIA_CATEGORY_BY_ID);
+  private categoryById = new Map(GAME_CATEGORY_BY_ID);
   private languageByCode = new Map(SUPPORTED_LANGUAGE_BY_CODE);
   private catalogSource: CatalogSnapshot["source"] = "local-fallback";
   private catalogUpdatedAt = new Date().toISOString();
+  private groupedSummaryCache: { data: GroupedModelsSummary; expiresAt: number } | null = null;
+  private static readonly GROUPED_SUMMARY_TTL_MS = 60_000;
 
   constructor(
     private readonly config: AppConfig,
@@ -309,9 +317,7 @@ export class GenerationService {
     const difficulty = Math.max(0, Math.min(100, Math.trunc(input.difficultyPercentage)));
 
     const normalizedContent = this.normalizeManualContent(input.content);
-    const topic = `${category.name} | manual | ${language} | d${difficulty}`;
     const query = `${category.name} manual curation ${language} difficulty ${difficulty}`;
-    const topicKey = this.normalizeTopicKey(topic, language);
     const uniquenessKey = this.buildUniquenessKey("word-pass", normalizedContent, language);
 
     const existing = await prisma.gameGeneration.findFirst({
@@ -326,8 +332,6 @@ export class GenerationService {
     const created = await prisma.gameGeneration.create({
       data: {
         gameType: "word-pass",
-        topic,
-        topicKey,
         query,
         language,
         status: input.status ?? "manual",
@@ -360,12 +364,12 @@ export class GenerationService {
   startGenerationProcess(input: GenerationProcessInput): GenerationProcessSnapshot {
     const task: GenerationProcessTask = {
       taskId: randomUUID(),
+      requestedBy: input.requestedBy === "backoffice" ? "backoffice" : "api",
       status: "running",
       requested: input.count,
       processed: 0,
       created: 0,
       duplicates: 0,
-      duplicateByTopic: 0,
       duplicateByContent: 0,
       failed: 0,
       startedAt: new Date().toISOString(),
@@ -382,6 +386,34 @@ export class GenerationService {
     return this.toGenerationProcessSnapshot(task);
   }
 
+  async runGenerationProcessBlocking(input: GenerationProcessInput): Promise<GenerationProcessSnapshot> {
+    const task: GenerationProcessTask = {
+      taskId: randomUUID(),
+      requestedBy: input.requestedBy === "backoffice" ? "backoffice" : "api",
+      status: "running",
+      requested: input.count,
+      processed: 0,
+      created: 0,
+      duplicates: 0,
+      duplicateByContent: 0,
+      failed: 0,
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      finishedAt: undefined,
+      generatedItems: [],
+      errors: []
+    };
+
+    this.generationProcesses.set(task.taskId, task);
+    this.pruneGenerationProcesses();
+    this.observer?.onProcessStarted?.({ taskId: task.taskId, requested: task.requested });
+
+    await this.runGenerationProcess(task.taskId, input);
+
+    const latest = this.generationProcesses.get(task.taskId) ?? task;
+    return this.toGenerationProcessSnapshot(latest, true);
+  }
+
   getGenerationProcess(taskId: string, includeItems = false): GenerationProcessSnapshot | null {
     const task = this.generationProcesses.get(taskId);
     if (!task) {
@@ -390,8 +422,22 @@ export class GenerationService {
     return this.toGenerationProcessSnapshot(task, includeItems);
   }
 
-  listGenerationProcesses(limit = 20): GenerationProcessSnapshot[] {
+  listGenerationProcesses(options?: {
+    limit?: number;
+    status?: "running" | "completed" | "failed";
+    requestedBy?: "api" | "backoffice";
+  }): GenerationProcessSnapshot[] {
+    const limit = options?.limit ?? 20;
     return [...this.generationProcesses.values()]
+      .filter((task) => {
+        if (options?.status && task.status !== options.status) {
+          return false;
+        }
+        if (options?.requestedBy && task.requestedBy !== options.requestedBy) {
+          return false;
+        }
+        return true;
+      })
       .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
       .slice(0, Math.max(1, limit))
       .map((task) => this.toGenerationProcessSnapshot(task));
@@ -464,6 +510,19 @@ export class GenerationService {
     return this.client.ingest(documents, ingestSource);
   }
 
+  private static readonly storedModelSelect = {
+    id: true,
+    gameType: true,
+    query: true,
+    language: true,
+    status: true,
+    categoryId: true,
+    categoryName: true,
+    requestJson: true,
+    responseJson: true,
+    createdAt: true,
+  } as const;
+
   async randomModels(filters: RandomModelsFilters): Promise<StoredGameModel[]> {
     const where: Prisma.GameGenerationWhereInput = {
       gameType: "word-pass"
@@ -485,10 +544,49 @@ export class GenerationService {
       };
     }
 
+    const poolSize = Math.min(1000, Math.max(filters.count * 30, 300));
+
+    if (typeof filters.difficultyPercentage === "number") {
+      const targetDifficulty = Math.max(0, Math.min(100, Math.trunc(filters.difficultyPercentage)));
+      const lightCandidates = await prisma.gameGeneration.findMany({
+        where,
+        select: { id: true, requestJson: true },
+        orderBy: { createdAt: "desc" },
+        take: poolSize
+      });
+
+      const matchingIds = lightCandidates
+        .filter((item) => {
+          const requestPayload = this.parseJson(item.requestJson);
+          return this.extractDifficultyFromRequest(requestPayload) === targetDifficulty;
+        })
+        .map((item) => item.id);
+
+      if (matchingIds.length === 0) {
+        return [];
+      }
+
+      const shuffled = [...matchingIds];
+      for (let index = shuffled.length - 1; index > 0; index -= 1) {
+        const swapIndex = Math.floor(Math.random() * (index + 1));
+        const current = shuffled[index];
+        shuffled[index] = shuffled[swapIndex];
+        shuffled[swapIndex] = current;
+      }
+
+      const selectedIds = shuffled.slice(0, Math.min(filters.count, shuffled.length));
+      const selected = await prisma.gameGeneration.findMany({
+        where: { id: { in: selectedIds } },
+        select: GenerationService.storedModelSelect,
+      });
+      return selected.map((item) => this.mapStoredModel(item));
+    }
+
     const candidates = await prisma.gameGeneration.findMany({
       where,
+      select: GenerationService.storedModelSelect,
       orderBy: { createdAt: "desc" },
-      take: Math.min(1000, Math.max(filters.count * 30, 300))
+      take: poolSize
     });
 
     if (candidates.length === 0) {
@@ -508,6 +606,10 @@ export class GenerationService {
   }
 
   async groupedModelsSummary(): Promise<GroupedModelsSummary> {
+    if (this.groupedSummaryCache && Date.now() < this.groupedSummaryCache.expiresAt) {
+      return this.groupedSummaryCache.data;
+    }
+
     const rows = await prisma.gameGeneration.groupBy({
       by: ["categoryId", "categoryName", "language"],
       where: { gameType: "word-pass" },
@@ -541,21 +643,40 @@ export class GenerationService {
       return { language, total };
     });
 
-    return {
+    const result: GroupedModelsSummary = {
       categories,
       languages,
       matrix
     };
+
+    this.groupedSummaryCache = {
+      data: result,
+      expiresAt: Date.now() + GenerationService.GROUPED_SUMMARY_TTL_MS,
+    };
+
+    return result;
   }
 
-  async history(limit = 20): Promise<StoredGameModel[]> {
+  async history(limit = 20, filters?: HistoryFilters): Promise<StoredGameModel[]> {
+    const normalizedLimit = Math.max(1, Math.min(1000, Math.trunc(limit)));
     const rows = await prisma.gameGeneration.findMany({
-      where: { gameType: "word-pass" },
+      where: {
+        gameType: "word-pass",
+        ...(filters?.categoryId ? { categoryId: this.getCategoryOrThrow(filters.categoryId).id } : {}),
+        ...(filters?.language ? { language: this.getLanguageOrThrow(filters.language) } : {}),
+      },
+      select: GenerationService.storedModelSelect,
       orderBy: { createdAt: "desc" },
-      take: limit
+      take: typeof filters?.difficultyPercentage === "number" ? Math.min(1000, normalizedLimit * 20) : normalizedLimit
     });
 
-    return rows.map((item) => this.mapStoredModel(item));
+    let models = rows.map((item) => this.mapStoredModel(item));
+    if (typeof filters?.difficultyPercentage === "number") {
+      const targetDifficulty = Math.max(0, Math.min(100, Math.trunc(filters.difficultyPercentage)));
+      models = models.filter((item) => this.extractDifficultyFromRequest(item.request) === targetDifficulty);
+    }
+
+    return models.slice(0, normalizedLimit);
   }
 
   private async runGenerationProcess(taskId: string, input: GenerationProcessInput): Promise<void> {
@@ -567,8 +688,9 @@ export class GenerationService {
     try {
       const category = this.getCategoryOrThrow(input.categoryId);
       const language = this.getLanguageOrThrow(input.language);
+      const concurrency = Math.min(3, input.count);
 
-      for (let index = 0; index < input.count; index += 1) {
+      const processOne = async (index: number): Promise<void> => {
         const resolved = this.buildResolvedInput(index, category, language);
         const payload: ResolvedGenerateInput = {
           ...resolved,
@@ -587,9 +709,6 @@ export class GenerationService {
             task.generatedItems.push(result.responsePayload);
           } else {
             task.duplicates += 1;
-            if (result.duplicateReason === "topic") {
-              task.duplicateByTopic += 1;
-            }
             if (result.duplicateReason === "content") {
               task.duplicateByContent += 1;
             }
@@ -601,8 +720,17 @@ export class GenerationService {
           }
         }
 
-        task.processed = index + 1;
+        task.processed += 1;
         task.updatedAt = new Date().toISOString();
+      };
+
+      for (let batchStart = 0; batchStart < input.count; batchStart += concurrency) {
+        const batchEnd = Math.min(batchStart + concurrency, input.count);
+        const batch = [];
+        for (let i = batchStart; i < batchEnd; i++) {
+          batch.push(processOne(i));
+        }
+        await Promise.allSettled(batch);
       }
 
       const producedAtLeastOne = task.created > 0 || task.duplicates > 0;
@@ -630,13 +758,13 @@ export class GenerationService {
     const total = Math.max(1, task.requested);
     return {
       taskId: task.taskId,
+      requestedBy: task.requestedBy,
       status: task.status,
       requested: task.requested,
       processed: task.processed,
       created: task.created,
       duplicates: task.duplicates,
       duplicateReasons: {
-        topic: task.duplicateByTopic,
         content: task.duplicateByContent
       },
       failed: task.failed,
@@ -676,10 +804,10 @@ export class GenerationService {
     language: string
   ): ResolvedGenerateInput {
     const categoryCount = this.categories.length;
-    const variant = TOPIC_VARIANTS[Math.floor(attempt / categoryCount) % TOPIC_VARIANTS.length];
+    const variant = PROMPT_VARIANTS[Math.floor(attempt / categoryCount) % PROMPT_VARIANTS.length];
     const frame =
       CONTEXT_FRAMES[
-        Math.floor(attempt / (categoryCount * TOPIC_VARIANTS.length)) % CONTEXT_FRAMES.length
+        Math.floor(attempt / (categoryCount * PROMPT_VARIANTS.length)) % CONTEXT_FRAMES.length
       ];
 
     const difficulty = this.pickRange(
@@ -698,7 +826,6 @@ export class GenerationService {
       difficultyPercentage: difficulty,
       numQuestions,
       letters,
-      topic: `${category.name} - ${variant} - ${frame}`,
       query: `${category.name} ${variant} ${frame} word-pass ${language} evitar respuestas ambiguas o sin sentido`
     };
   }
@@ -717,7 +844,6 @@ export class GenerationService {
     const category = this.getCategoryOrThrow(input.categoryId);
 
     const requestPayload: Record<string, string> = {
-      topic: input.topic,
       query: input.query,
       max_tokens: "512",
       use_cache: "true",
@@ -734,25 +860,6 @@ export class GenerationService {
       requestPayload.letters = input.letters;
     }
 
-    const topicKey = this.normalizeTopicKey(input.topic, language);
-    if (topicKey) {
-      const existingTopic = await prisma.gameGeneration.findFirst({
-        where: {
-          gameType: "word-pass",
-          topicKey
-        },
-        select: { id: true }
-      });
-      if (existingTopic) {
-        this.observer?.onModelDuplicate?.("topic");
-        return {
-          stored: false,
-          duplicateReason: "topic",
-          responsePayload: { duplicate: true, reason: "topic" }
-        };
-      }
-    }
-
     this.ensureAiAuthCircuitClosed();
 
     let responsePayload: unknown;
@@ -765,7 +872,8 @@ export class GenerationService {
       throw error;
     }
 
-    const uniquenessKey = this.buildUniquenessKey("word-pass", responsePayload, language);
+    const sanitizedResponsePayload = this.sanitizeGeneratedPayload(responsePayload);
+    const uniquenessKey = this.buildUniquenessKey("word-pass", sanitizedResponsePayload, language);
 
     const existingContent = await prisma.gameGeneration.findFirst({
       where: { uniquenessKey },
@@ -776,16 +884,16 @@ export class GenerationService {
       return {
         stored: false,
         duplicateReason: "content",
-        responsePayload
+            responsePayload: sanitizedResponsePayload
       };
     }
+
+        const requestPayloadForStorage = this.buildStoredRequestPayload(requestPayload, category, language);
 
     try {
       await prisma.gameGeneration.create({
         data: {
           gameType: "word-pass",
-          topic: input.topic,
-          topicKey,
           query: input.query,
           language,
           status: "created",
@@ -793,8 +901,8 @@ export class GenerationService {
           categoryName: metadata?.category?.name ?? category.name,
           uniquenessKey,
           batchRunId: metadata?.batchRunId,
-          requestJson: JSON.stringify(requestPayload),
-          responseJson: JSON.stringify(responsePayload)
+          requestJson: JSON.stringify(requestPayloadForStorage),
+          responseJson: JSON.stringify(sanitizedResponsePayload)
         }
       });
     } catch (error) {
@@ -803,7 +911,7 @@ export class GenerationService {
         return {
           stored: false,
           duplicateReason: "content",
-          responsePayload
+          responsePayload: sanitizedResponsePayload
         };
       }
       this.observer?.onModelFailed?.();
@@ -814,7 +922,7 @@ export class GenerationService {
 
     return {
       stored: true,
-      responsePayload
+      responsePayload: sanitizedResponsePayload
     };
   }
 
@@ -828,7 +936,6 @@ export class GenerationService {
   private mapStoredModel(item: {
     id: string;
     gameType: string;
-    topic: string;
     query: string;
     language: string;
     status: string;
@@ -841,16 +948,32 @@ export class GenerationService {
     return {
       id: item.id,
       gameType: item.gameType,
-      topic: item.topic,
       query: item.query,
       language: item.language,
       status: item.status,
       categoryId: item.categoryId,
       categoryName: item.categoryName,
-      request: this.parseJson(item.requestJson),
-      response: this.parseJson(item.responseJson),
+      request: this.sanitizeGeneratedPayload(this.parseJson(item.requestJson)),
+      response: this.sanitizeGeneratedPayload(this.parseJson(item.responseJson)),
       createdAt: item.createdAt
     };
+  }
+
+  private buildStoredRequestPayload(
+    requestPayload: Record<string, string>,
+    category: { id: string; name: string },
+    language: string
+  ): Record<string, string> {
+    return {
+      ...requestPayload,
+      category_id: category.id,
+      category_name: category.name,
+      language,
+    };
+  }
+
+  private sanitizeGeneratedPayload(payload: unknown): unknown {
+    return payload;
   }
 
   private parseJson(value: string): unknown {
@@ -876,22 +999,92 @@ export class GenerationService {
     return compact;
   }
 
-  private normalizeTopicKey(topic: string, language: string): string {
-    const normalized = topic
+  private buildUniquenessKey(gameType: string, payload: unknown, language: string): string {
+    const primarySignature = this.extractPrimaryContentSignature(gameType, payload);
+    const stablePayload = primarySignature
+      ? `primary:${primarySignature}`
+      : this.stableStringify(payload);
+    return createHash("sha256")
+      .update(`${gameType}|${language.toLowerCase()}|${stablePayload}`)
+      .digest("hex");
+  }
+
+  private extractPrimaryContentSignature(gameType: string, payload: unknown): string | null {
+    if (!payload || typeof payload !== "object") {
+      return null;
+    }
+
+    if (gameType === "quiz") {
+      const rawQuestions = this.extractStringArrayFromObjects(payload, "questions", "question");
+      if (rawQuestions.length === 0) {
+        return null;
+      }
+      return rawQuestions
+        .map((item) => this.normalizeContentToken(item))
+        .filter((item) => item.length > 0)
+        .join("|");
+    }
+
+    const words = this.extractStringArrayFromObjects(payload, "words", "answer");
+    if (words.length === 0) {
+      return null;
+    }
+    return words
+      .map((item) => this.normalizeContentToken(item))
+      .filter((item) => item.length > 0)
+      .sort()
+      .join("|");
+  }
+
+  private extractStringArrayFromObjects(payload: unknown, arrayKey: string, fieldKey: string): string[] {
+    if (!payload || typeof payload !== "object") {
+      return [];
+    }
+
+    const asRecord = payload as Record<string, unknown>;
+    const candidate = asRecord[arrayKey];
+    if (!Array.isArray(candidate)) {
+      return [];
+    }
+
+    return candidate
+      .map((item) => {
+        if (!item || typeof item !== "object") {
+          return "";
+        }
+        const value = (item as Record<string, unknown>)[fieldKey];
+        return typeof value === "string" ? value : "";
+      })
+      .filter((item) => item.trim().length > 0);
+  }
+
+  private normalizeContentToken(value: string): string {
+    return value
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .toLowerCase()
       .replace(/[^a-z0-9\s]/g, " ")
       .replace(/\s+/g, " ")
       .trim();
-    return `${language.toLowerCase()}|${normalized}`;
   }
 
-  private buildUniquenessKey(gameType: string, payload: unknown, language: string): string {
-    const stablePayload = this.stableStringify(payload);
-    return createHash("sha256")
-      .update(`${gameType}|${language.toLowerCase()}|${stablePayload}`)
-      .digest("hex");
+  private extractDifficultyFromRequest(requestPayload: unknown): number | undefined {
+    if (!requestPayload || typeof requestPayload !== "object") {
+      return undefined;
+    }
+
+    const raw = (requestPayload as Record<string, unknown>).difficulty_percentage;
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      return Math.max(0, Math.min(100, Math.trunc(raw)));
+    }
+    if (typeof raw === "string") {
+      const parsed = Number(raw);
+      if (Number.isFinite(parsed)) {
+        return Math.max(0, Math.min(100, Math.trunc(parsed)));
+      }
+    }
+
+    return undefined;
   }
 
   private stableStringify(value: unknown): string {

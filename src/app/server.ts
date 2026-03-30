@@ -62,6 +62,10 @@ async function buildServer() {
   });
 
   app.addHook("onResponse", async (request, reply) => {
+    if (request.url === "/health") {
+      return;
+    }
+
     const requestAny = request as typeof request & {
       _startedAt?: number;
       _requestBytes?: number;
@@ -70,7 +74,7 @@ async function buildServer() {
 
     const responseContentLength = Number(reply.getHeader("content-length") ?? 0);
     const responseBytes = Number.isFinite(responseContentLength) ? responseContentLength : 0;
-    const route = (request.routeOptions.url ?? request.url.split("?")[0]) as string;
+    const route = (request.routeOptions.url ?? "UNMATCHED") as string;
     const correlationId = requestAny._correlationId ?? randomUUID();
     const durationMs = Math.max(0, Date.now() - (requestAny._startedAt ?? Date.now()));
 

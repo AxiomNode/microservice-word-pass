@@ -2,6 +2,7 @@ services:
   wordpass-db:
     image: postgres:16-alpine
     container_name: microservice_wordpass_db_dev
+    restart: unless-stopped
     environment:
       POSTGRES_DB: wordpassdb
       POSTGRES_USER: wordpass
@@ -15,16 +16,20 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    mem_limit: 512m
+    mem_reservation: 256m
+    cpus: "1.0"
 
   microservice-wordpass:
     container_name: microservice_wordpass_dev
+    restart: unless-stopped
     build:
       context: ..
       dockerfile: microservice-wordpass/src/Dockerfile
     environment:
       AI_ENGINE_BASE_URL: http://host.docker.internal:7001
       AI_ENGINE_API_KEY: dev_games_test_key_2026
-      DATABASE_URL: postgresql://wordpass:wordpass@wordpass-db:5432/wordpassdb?schema=public
+      DATABASE_URL: postgresql://wordpass:wordpass@wordpass-db:5432/wordpassdb?schema=public&connection_limit=10&pool_timeout=20
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -35,6 +40,15 @@ services:
       - ./src/.env.secrets
     ports:
       - "7101:7100"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:7100/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    mem_limit: 512m
+    mem_reservation: 256m
+    cpus: "1.0"
 
 volumes:
   wordpass_db_data:

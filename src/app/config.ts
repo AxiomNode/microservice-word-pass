@@ -20,7 +20,7 @@ const EnvBoolean = z.preprocess((value) => {
 
 const ConfigSchema = z.object({
   SERVICE_NAME: z.string().default("microservice-wordpass"),
-  SERVICE_PORT: z.coerce.number().int().positive().default(7100),
+  SERVICE_PORT: z.coerce.number().int().positive().default(7101),
   NODE_ENV: z.string().default("development"),
   AI_ENGINE_BASE_URL: z.string().url().default("http://localhost:7001"),
   AI_ENGINE_GENERATION_ENDPOINT: z.string().default("/generate/word-pass"),

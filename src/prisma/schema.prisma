@@ -10,8 +10,6 @@ datasource db {
 model GameGeneration {
   id           String   @id @default(cuid())
   gameType     String
-  topic        String
-  topicKey      String?
   query        String
   language     String
   status       String
@@ -24,8 +22,6 @@ model GameGeneration {
   createdAt    DateTime @default(now())
 
   @@index([gameType, createdAt])
-  @@index([gameType, topicKey])
   @@index([gameType, language, categoryId, createdAt])
   @@index([gameType, categoryId, language])
-  @@unique([gameType, topicKey])
 }

@@ -29,7 +29,6 @@ export class ServiceMetrics {
   private outboundFailuresTotal = 0;
   private generatedStoredTotal = 0;
   private generatedDuplicateTotal = 0;
-  private generatedDuplicateTopicTotal = 0;
   private generatedDuplicateContentTotal = 0;
   private generatedFailedTotal = 0;
   private ingestedDocumentsTotal = 0;
@@ -47,7 +46,6 @@ export class ServiceMetrics {
   private generationProcessesCreatedTotal = 0;
   private generationProcessesDuplicatesTotal = 0;
   private generationProcessesFailedItemsTotal = 0;
-  private generationProcessesDuplicateTopicTotal = 0;
   private generationProcessesDuplicateContentTotal = 0;
   private generationProcessesOnlyDuplicatesTotal = 0;
   private requestBytesInTotal = 0;
@@ -99,11 +97,8 @@ export class ServiceMetrics {
     this.generatedStoredTotal += 1;
   }
 
-  recordGenerationDuplicate(reason: "topic" | "content"): void {
+  recordGenerationDuplicate(reason: "content"): void {
     this.generatedDuplicateTotal += 1;
-    if (reason === "topic") {
-      this.generatedDuplicateTopicTotal += 1;
-    }
     if (reason === "content") {
       this.generatedDuplicateContentTotal += 1;
     }
@@ -152,7 +147,6 @@ export class ServiceMetrics {
     this.generationProcessesCreatedTotal += snapshot.created;
     this.generationProcessesDuplicatesTotal += snapshot.duplicates;
     this.generationProcessesFailedItemsTotal += snapshot.failed;
-    this.generationProcessesDuplicateTopicTotal += snapshot.duplicateReasons.topic;
     this.generationProcessesDuplicateContentTotal += snapshot.duplicateReasons.content;
     if (snapshot.created === 0 && snapshot.duplicates > 0 && snapshot.failed === 0) {
       this.generationProcessesOnlyDuplicatesTotal += 1;
@@ -208,7 +202,6 @@ export class ServiceMetrics {
       generation: {
         generatedStoredTotal: this.generatedStoredTotal,
         generatedDuplicateTotal: this.generatedDuplicateTotal,
-        generatedDuplicateTopicTotal: this.generatedDuplicateTopicTotal,
         generatedDuplicateContentTotal: this.generatedDuplicateContentTotal,
         generatedFailedTotal: this.generatedFailedTotal,
         ingestedDocumentsTotal: this.ingestedDocumentsTotal,
@@ -234,7 +227,6 @@ export class ServiceMetrics {
         createdTotal: this.generationProcessesCreatedTotal,
         duplicatesTotal: this.generationProcessesDuplicatesTotal,
         failedItemsTotal: this.generationProcessesFailedItemsTotal,
-        duplicateTopicTotal: this.generationProcessesDuplicateTopicTotal,
         duplicateContentTotal: this.generationProcessesDuplicateContentTotal,
         onlyDuplicatesTotal: this.generationProcessesOnlyDuplicatesTotal
       },
@@ -291,10 +283,6 @@ export class ServiceMetrics {
     lines.push("# HELP microservice_generated_duplicate_total Total duplicate generations rejected");
     lines.push("# TYPE microservice_generated_duplicate_total counter");
     lines.push(`microservice_generated_duplicate_total ${this.generatedDuplicateTotal}`);
-
-    lines.push("# HELP microservice_generated_duplicate_topic_total Total duplicate generations rejected by topic");
-    lines.push("# TYPE microservice_generated_duplicate_topic_total counter");
-    lines.push(`microservice_generated_duplicate_topic_total ${this.generatedDuplicateTopicTotal}`);
 
     lines.push("# HELP microservice_generated_duplicate_content_total Total duplicate generations rejected by content");
     lines.push("# TYPE microservice_generated_duplicate_content_total counter");

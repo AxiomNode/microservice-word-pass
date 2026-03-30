@@ -1,1 +1,1 @@
-export * from "@axiomnode/shared-sdk-client/trivia-categories";
+export * from "@axiomnode/shared-sdk-client/game-categories";

@@ -1,60 +1,28 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { GenerationService } from "../services/generationService.js";
+import {
+  BaseGenerateSchema,
+  IngestDocumentSchema,
+  IngestSchema,
+  RandomModelsQuerySchema,
+  HistoryQuerySchema,
+  GenerationProcessParamsSchema,
+  GenerationProcessQuerySchema,
+  GenerationProcessesListQuerySchema,
+  ManualHistoryEntrySchema,
+  HistoryItemParamsSchema,
+} from "@axiomnode/shared-sdk-client";
 
-const GenerateSchema = z.object({
-  categoryId: z.string().min(1),
-  language: z.string().min(2).max(5),
-  difficultyPercentage: z.number().int().min(0).max(100).optional(),
-  numQuestions: z.number().int().min(1).max(50).optional(),
-  letters: z.string().optional()
+const GenerateSchema = BaseGenerateSchema.extend({
+  letters: z.string().optional(),
 });
 
 const GenerateProcessSchema = GenerateSchema.extend({
   count: z.number().int().min(1).max(100).default(10)
 });
 
-const IngestDocumentSchema = z.object({
-  content: z.string().min(1),
-  docId: z.string().min(1).optional(),
-  metadata: z.record(z.unknown()).optional()
-});
-
-const IngestSchema = z.object({
-  documents: z.array(IngestDocumentSchema).min(1),
-  source: z.string().min(1).optional()
-});
-
-const RandomModelsQuerySchema = z.object({
-  count: z.coerce.number().int().min(1).max(100).default(5),
-  categoryId: z.string().min(1).optional(),
-  language: z.string().min(2).max(5).optional(),
-  status: z.string().min(1).optional(),
-  createdAfter: z.coerce.date().optional(),
-  createdBefore: z.coerce.date().optional()
-});
-
-const GenerationProcessParamsSchema = z.object({
-  taskId: z.string().uuid()
-});
-
-const GenerationProcessQuerySchema = z.object({
-  includeItems: z.coerce.boolean().default(false)
-});
-
-const ManualHistoryEntrySchema = z.object({
-  categoryId: z.string().min(1),
-  language: z.string().min(2).max(5),
-  difficultyPercentage: z.coerce.number().int().min(0).max(100),
-  content: z.record(z.unknown()).refine((value) => Object.keys(value).length > 0, {
-    message: "content must include at least one field"
-  }),
-  status: z.enum(["manual", "validated"]).default("manual")
-});
-
-const HistoryItemParamsSchema = z.object({
-  entryId: z.string().min(1)
-});
+const GenerateProcessWaitSchema = GenerateProcessSchema;
 
 export async function gameRoutes(
   app: FastifyInstance,
@@ -116,10 +84,45 @@ export async function gameRoutes(
     });
   });
 
+  app.post("/games/generate/process/wait", async (request, reply) => {
+    const parsed = GenerateProcessWaitSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        message: "Invalid payload",
+        errors: parsed.error.flatten()
+      });
+    }
+
+    try {
+      generationService.assertAiGenerationAvailable();
+      const task = await generationService.runGenerationProcessBlocking(parsed.data);
+      return reply.status(201).send({
+        gameType: "word-pass",
+        message: "Generation process completed",
+        task
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      const circuitOpen = /ai auth circuit open/i.test(message);
+      return reply.status(circuitOpen ? 503 : 502).send({
+        message: circuitOpen
+          ? "Generation temporarily unavailable due to AI authentication failures"
+          : "Failed to complete generation process",
+        error: message
+      });
+    }
+  });
+
   app.get("/games/generate/processes", async (request, reply) => {
-    const limitRaw = (request.query as { limit?: string } | undefined)?.limit;
-    const limit = limitRaw ? Number(limitRaw) : 20;
-    const tasks = generationService.listGenerationProcesses(Number.isNaN(limit) ? 20 : limit);
+    const parsed = GenerationProcessesListQuerySchema.safeParse(request.query ?? {});
+    if (!parsed.success) {
+      return reply.status(400).send({
+        message: "Invalid query parameters",
+        errors: parsed.error.flatten(),
+      });
+    }
+
+    const tasks = generationService.listGenerationProcesses(parsed.data);
     return reply.send({
       gameType: "word-pass",
       total: tasks.length,
@@ -171,7 +174,19 @@ export async function gameRoutes(
     }
 
     try {
-      const result = await generationService.ingestToRag(parsed.data.documents, parsed.data.source);
+      const enrichedDocuments = parsed.data.documents.map((document) => ({
+        ...document,
+        metadata: {
+          ...(document.metadata ?? {}),
+          ...(parsed.data.categoryId ? { categoryId: parsed.data.categoryId } : {}),
+          ...(parsed.data.language ? { language: parsed.data.language } : {}),
+          ...(typeof parsed.data.difficultyPercentage === "number"
+            ? { difficultyPercentage: parsed.data.difficultyPercentage }
+            : {}),
+        },
+      }));
+
+      const result = await generationService.ingestToRag(enrichedDocuments, parsed.data.source);
       onIngestedDocuments?.(result.ingested);
       return reply.status(202).send({
         gameType: "word-pass",
@@ -204,9 +219,19 @@ export async function gameRoutes(
   });
 
   app.get("/games/history", async (request, reply) => {
-    const limitRaw = (request.query as { limit?: string } | undefined)?.limit;
-    const limit = limitRaw ? Number(limitRaw) : 20;
-    const items = await generationService.history(Number.isNaN(limit) ? 20 : limit);
+    const parsed = HistoryQuerySchema.safeParse(request.query ?? {});
+    if (!parsed.success) {
+      return reply.status(400).send({
+        message: "Invalid query parameters",
+        errors: parsed.error.flatten(),
+      });
+    }
+
+    const items = await generationService.history(parsed.data.limit, {
+      categoryId: parsed.data.categoryId,
+      language: parsed.data.language,
+      difficultyPercentage: parsed.data.difficultyPercentage,
+    });
     return reply.send({ gameType: "word-pass", items });
   });
 
