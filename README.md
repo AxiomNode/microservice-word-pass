@@ -2,9 +2,9 @@
 
 TypeScript microservice that requests **word-pass** generation from **ai-engine** and persists generated sessions in a database.
 
-## Responsabilidad principal
+## Main responsibility
 
-- Generacion y persistencia de contenido wordpass con control de duplicados.
+- Word-pass content generation and persistence with duplicate control.
 
 ## Stack
 - Runtime: Node.js 20+
@@ -28,7 +28,7 @@ npm run db:push
 npm run dev
 ```
 
-`.env.example` contiene placeholders. Para inyectar secretos reales en `src/.env.secrets`, ejecutar desde el repositorio privado `secrets`:
+`.env.example` contains placeholders. To inject real secrets into `src/.env.secrets`, run from the private `secrets` repository:
 
 ```bash
 node scripts/prepare-runtime-secrets.mjs dev
@@ -38,21 +38,21 @@ Default ai-engine endpoint configured by this service: `/generate/word-pass`.
 
 ## Shared modules
 
-Este servicio consume modulos compartidos de `@axiomnode/shared-sdk-client`:
+This service consumes shared modules from `@axiomnode/shared-sdk-client`:
 
-- `src/app/services/aiEngineClient.ts` re-exporta `@axiomnode/shared-sdk-client/ai-engine-client`.
-- `src/app/services/triviaCategories.ts` re-exporta `@axiomnode/shared-sdk-client/trivia-categories`.
-- `src/app/plugins/privateDocs.ts` delega en `@axiomnode/shared-sdk-client/private-docs`.
+- `src/app/services/aiEngineClient.ts` re-exports `@axiomnode/shared-sdk-client/ai-engine-client`.
+- `src/app/services/triviaCategories.ts` re-exports `@axiomnode/shared-sdk-client/trivia-categories`.
+- `src/app/plugins/privateDocs.ts` delegates to `@axiomnode/shared-sdk-client/private-docs`.
 
-## Integracion En Nueva Arquitectura
+## Integration in new architecture
 
-Este servicio pasa a ser un servicio de dominio interno en el modelo Gateway + BFF.
+This service becomes an internal domain service in the Gateway + BFF model.
 
-- Entrada publica esperada: `api-gateway`.
-- Consumidores directos recomendados: `bff-mobile`, `bff-backoffice`.
-- Exposicion directa a internet: solo temporal durante la migracion.
+- Expected public entry point: `api-gateway`.
+- Recommended direct consumers: `bff-mobile`, `bff-backoffice`.
+- Direct internet exposure: only temporary during migration.
 
-Contrato interno inicial publicado en:
+Initial internal contract published at:
 
 - `contracts-and-schemas/schemas/openapi/internal-microservice-wordpass.v1.yaml`
 
