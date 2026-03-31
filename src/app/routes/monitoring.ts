@@ -3,10 +3,13 @@ import { z } from "zod";
 import { ServiceMetrics } from "../services/serviceMetrics.js";
 import { GenerationService } from "../services/generationService.js";
 
+/** @module monitoring - Observability routes: stats snapshot, recent logs, and Prometheus metrics. */
+
 const LogsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(2000).default(200)
 });
 
+/** Registers monitoring endpoints: /monitor/stats, /monitor/logs, and /metrics. */
 export async function monitoringRoutes(
   app: FastifyInstance,
   metrics: ServiceMetrics,

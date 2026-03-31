@@ -2,6 +2,9 @@ import type { FastifyBaseLogger } from "fastify";
 import { AppConfig } from "../config.js";
 import { GenerationService } from "./generationService.js";
 
+/** @module modelGenerationJob - Periodic scheduler that batch-generates word-pass models on a timer. */
+
+/** Manages a recurring interval that triggers batch model generation via the GenerationService. */
 export class ModelGenerationJob {
   private timer: NodeJS.Timeout | undefined;
   private running = false;

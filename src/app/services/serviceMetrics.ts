@@ -2,6 +2,8 @@ import { AppConfig } from "../config.js";
 import { BatchGenerationResult, GenerationProcessSnapshot } from "./generationService.js";
 import { OutboundRequestMetric } from "./aiEngineClient.js";
 
+/** @module serviceMetrics - In-memory metrics collector for traffic, generation, and batch stats. */
+
 interface LogEvent {
   ts: string;
   level: "info" | "warn" | "error";
@@ -18,6 +20,7 @@ interface AiAuthCircuitState {
   openedTotal: number;
 }
 
+/** Collects and exposes operational metrics for the wordpass service. */
 export class ServiceMetrics {
   private readonly startedAt = Date.now();
   private readonly routeCounters = new Map<string, number>();
@@ -61,6 +64,7 @@ export class ServiceMetrics {
 
   constructor(private readonly config: AppConfig) {}
 
+  /** Records an incoming HTTP request metric (method, route, status, size, duration). */
   recordIncomingRequest(metric: {
     method: string;
     route: string;
@@ -81,6 +85,7 @@ export class ServiceMetrics {
     });
   }
 
+  /** Records an outbound HTTP request to ai-engine. */
   recordOutboundRequest(metric: OutboundRequestMetric): void {
     this.outboundRequestsTotal += 1;
     this.outboundRequestBytesTotal += metric.requestBytes;
@@ -93,10 +98,12 @@ export class ServiceMetrics {
     this.outboundCounters.set(key, (this.outboundCounters.get(key) ?? 0) + 1);
   }
 
+  /** Increments the stored-generation counter. */
   recordGenerationStored(): void {
     this.generatedStoredTotal += 1;
   }
 
+  /** Increments the duplicate-generation counter with the given reason. */
   recordGenerationDuplicate(reason: "content"): void {
     this.generatedDuplicateTotal += 1;
     if (reason === "content") {
@@ -106,14 +113,17 @@ export class ServiceMetrics {
     this.pushLog("info", "generation_duplicate", { reason });
   }
 
+  /** Increments the failed-generation counter. */
   recordGenerationFailed(): void {
     this.generatedFailedTotal += 1;
   }
 
+  /** Records the total number of documents ingested via RAG. */
   recordIngestedDocuments(total: number): void {
     this.ingestedDocumentsTotal += total;
   }
 
+  /** Records a completed batch generation run. */
   recordBatch(result: BatchGenerationResult): void {
     this.batchRunsTotal += 1;
     this.batchRequestedTotal += result.requested;
@@ -131,6 +141,7 @@ export class ServiceMetrics {
     });
   }
 
+  /** Records the start of an async generation process. */
   recordGenerationProcessStarted(requested: number): void {
     this.generationProcessesStartedTotal += 1;
     this.generationProcessesRequestedTotal += requested;
@@ -139,6 +150,7 @@ export class ServiceMetrics {
     });
   }
 
+  /** Records the completion of an async generation process. */
   recordGenerationProcessCompleted(snapshot: GenerationProcessSnapshot): void {
     this.generationProcessesFinishedTotal += 1;
     if (snapshot.status === "failed") {
@@ -164,10 +176,12 @@ export class ServiceMetrics {
     });
   }
 
+  /** Appends a structured log event to the internal buffer. */
   recordLog(level: "info" | "warn" | "error", message: string, context?: Record<string, unknown>): void {
     this.pushLog(level, message, context);
   }
 
+  /** Updates the cached AI auth circuit-breaker state. */
   recordAiAuthCircuitState(state: AiAuthCircuitState): void {
     this.aiAuthCircuitOpen = state.open;
     this.aiAuthFailureStreak = state.failureStreak;
@@ -177,6 +191,7 @@ export class ServiceMetrics {
     this.aiAuthCircuitOpenedTotal = state.openedTotal;
   }
 
+  /** Returns a full snapshot of all collected metrics. */
   snapshot() {
     const generationAttemptsTotal =
       this.generatedStoredTotal + this.generatedDuplicateTotal + this.generatedFailedTotal;
@@ -258,10 +273,12 @@ export class ServiceMetrics {
     };
   }
 
+  /** Returns the most recent log events, up to the given limit. */
   recentLogs(limit = 200): LogEvent[] {
     return this.logs.slice(-Math.max(1, limit));
   }
 
+  /** Serializes all counters and gauges into Prometheus text exposition format. */
   toPrometheus(): string {
     const lines: string[] = [];
     lines.push("# HELP microservice_requests_received_total Total incoming requests");

@@ -1,3 +1,4 @@
+/** @module config - Zod-validated environment configuration for the wordpass microservice. */
 import { z } from "zod";
 
 const OptionalEnvString = z.preprocess(
@@ -48,8 +49,10 @@ const ConfigSchema = z.object({
   DATABASE_URL: z.string().min(1)
 });
 
+/** Fully validated application configuration derived from environment variables. */
 export type AppConfig = z.infer<typeof ConfigSchema>;
 
+/** Parses and validates environment variables into a typed AppConfig, throwing on invalid input. */
 export function loadConfig(): AppConfig {
   const parsed = ConfigSchema.safeParse(process.env);
   if (!parsed.success) {

@@ -15,6 +15,9 @@ import { ModelGenerationJob } from "./services/modelGenerationJob.js";
 import { monitoringRoutes } from "./routes/monitoring.js";
 import { ServiceMetrics } from "./services/serviceMetrics.js";
 
+/** @module server - Fastify application bootstrap, middleware setup, and main entrypoint. */
+
+/** Builds and configures the Fastify server with all plugins, routes, and hooks. */
 async function buildServer() {
   const config = loadConfig();
   const app = Fastify({ logger: true });
@@ -111,6 +114,7 @@ async function buildServer() {
   return { app, config, generationJob, generationService, metrics };
 }
 
+/** Starts the server, initializes catalogs, and launches the periodic generation job. */
 async function main() {
   const { app, config, generationJob, generationService, metrics } = await buildServer();
 

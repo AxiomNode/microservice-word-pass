@@ -7,10 +7,14 @@ import {
 
 import { AppConfig } from "../config.js";
 
+/** @module privateDocs - Token-protected Swagger UI plugin for private API documentation. */
+
+/** Resolves the bearer token used to gate access to private docs. */
 export function resolvePrivateDocsToken(config: AppConfig): string | null {
   return resolvePrivateDocsTokenShared(config, { fallbackToAiEngineKey: true });
 }
 
+/** Checks whether an incoming request carries a valid private-docs authorization token. */
 export function isAuthorizedForPrivateDocs(
   request: FastifyRequest,
   expectedToken: string
@@ -18,6 +22,7 @@ export function isAuthorizedForPrivateDocs(
   return isAuthorizedForPrivateDocsShared(request.headers, expectedToken);
 }
 
+/** Registers the Swagger UI plugin behind token-based authentication, if enabled. */
 export async function registerPrivateDocs(app: FastifyInstance, config: AppConfig): Promise<void> {
   if (!config.PRIVATE_DOCS_ENABLED) {
     return;

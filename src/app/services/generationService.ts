@@ -17,6 +17,9 @@ import {
   GameCategory
 } from "./triviaCategories.js";
 
+/** @module generationService - Core service for AI-driven word-pass model generation, storage, and retrieval. */
+
+/** Snapshot of the currently loaded category/language catalogs. */
 export interface CatalogSnapshot {
   source: "local-fallback" | "ai-engine";
   categories: { id: string; name: string }[];
@@ -24,6 +27,7 @@ export interface CatalogSnapshot {
   updatedAt: string;
 }
 
+/** State of the AI authentication circuit breaker. */
 export interface AiAuthCircuitSnapshot {
   open: boolean;
   failureStreak: number;
@@ -33,6 +37,7 @@ export interface AiAuthCircuitSnapshot {
   openedTotal: number;
 }
 
+/** Observer callbacks for lifecycle events emitted by the GenerationService. */
 export interface GenerationServiceObserver {
   onModelStored?: () => void;
   onModelDuplicate?: (reason: "content") => void;
@@ -44,6 +49,7 @@ export interface GenerationServiceObserver {
   onOutboundRequest?: AiEngineClientObserver["onOutboundRequest"];
 }
 
+/** Input parameters for a single AI generation request. */
 export interface GenerateInput {
   categoryId: string;
   language: string;
@@ -53,6 +59,7 @@ export interface GenerateInput {
   requestedBy?: "api" | "backoffice";
 }
 
+/** Input parameters for manually creating a game model from the backoffice. */
 export interface ManualModelInput {
   categoryId: string;
   language: string;
@@ -61,10 +68,12 @@ export interface ManualModelInput {
   status?: "manual" | "validated";
 }
 
+/** Input parameters for a multi-item generation process. */
 export interface GenerationProcessInput extends GenerateInput {
   count: number;
 }
 
+/** Progress and result snapshot of an ongoing or completed generation process. */
 export interface GenerationProcessSnapshot {
   taskId: string;
   requestedBy: "api" | "backoffice";
@@ -93,6 +102,7 @@ interface ResolvedGenerateInput extends GenerateInput {
   query: string;
 }
 
+/** Filters for retrieving random stored game models. */
 export interface RandomModelsFilters {
   count: number;
   categoryId?: string;
@@ -103,18 +113,21 @@ export interface RandomModelsFilters {
   createdBefore?: Date;
 }
 
+/** Filters for querying model generation history. */
 export interface HistoryFilters {
   categoryId?: string;
   language?: string;
   difficultyPercentage?: number;
 }
 
+/** Aggregated model counts grouped by category, language, and their matrix. */
 export interface GroupedModelsSummary {
   categories: Array<{ categoryId: string; categoryName: string; total: number }>;
   languages: Array<{ language: string; total: number }>;
   matrix: Array<{ categoryId: string; categoryName: string; language: string; total: number }>;
 }
 
+/** Summary result of a periodic batch generation run. */
 export interface BatchGenerationResult {
   runId: string;
   requested: number;
@@ -206,6 +219,7 @@ const LETTER_SETS = [
   "A,C,E,G,I,K,L,M,N,O,P,R,S,T,U,V"
 ];
 
+/** Core service: generates word-pass models via AI, stores them, and manages catalogs and processes. */
 export class GenerationService {
   private readonly client: AiEngineClient;
   private readonly generationProcesses = new Map<string, GenerationProcessTask>();
@@ -235,6 +249,7 @@ export class GenerationService {
     });
   }
 
+  /** Fetches category/language catalogs from ai-engine, falling back to local defaults on failure. */
   async refreshCatalogs(): Promise<CatalogSnapshot> {
     try {
       this.ensureAiAuthCircuitClosed();
@@ -256,6 +271,7 @@ export class GenerationService {
     return this.getCatalogSnapshot();
   }
 
+  /** Performs a lightweight connectivity check against ai-engine to verify auth credentials. */
   async runAiAuthSmokeCheck(): Promise<{ ok: true } | { ok: false; reason: string }> {
     try {
       this.ensureAiAuthCircuitClosed();
@@ -271,10 +287,12 @@ export class GenerationService {
     }
   }
 
+  /** Throws if the AI auth circuit breaker is currently open. */
   assertAiGenerationAvailable(): void {
     this.ensureAiAuthCircuitClosed();
   }
 
+  /** Returns the current state of the AI auth circuit breaker. */
   getAiAuthCircuitSnapshot(): AiAuthCircuitSnapshot {
     const open = this.aiAuthCircuitOpenedUntilMs > Date.now();
     return {
@@ -287,6 +305,7 @@ export class GenerationService {
     };
   }
 
+  /** Returns the current catalog snapshot (categories, languages, source). */
   getCatalogSnapshot(): CatalogSnapshot {
     return {
       source: this.catalogSource,
@@ -296,6 +315,7 @@ export class GenerationService {
     };
   }
 
+  /** Generates a single word-pass model via AI and stores it in the database. */
   async generateAndStore(input: GenerateInput): Promise<unknown> {
     const category = this.getCategoryOrThrow(input.categoryId);
     const language = this.getLanguageOrThrow(input.language);
@@ -311,6 +331,7 @@ export class GenerationService {
     return result.responsePayload;
   }
 
+  /** Stores a manually created model entry from the backoffice. */
   async storeManualModel(input: ManualModelInput): Promise<StoredGameModel> {
     const category = this.getCategoryOrThrow(input.categoryId);
     const language = this.getLanguageOrThrow(input.language);
@@ -351,6 +372,7 @@ export class GenerationService {
     return this.mapStoredModel(created);
   }
 
+  /** Deletes a single history item by its ID. */
   async deleteHistoryItem(id: string): Promise<boolean> {
     const deleted = await prisma.gameGeneration.deleteMany({
       where: {
@@ -361,6 +383,7 @@ export class GenerationService {
     return deleted.count > 0;
   }
 
+  /** Starts an asynchronous multi-item generation process (fire-and-forget). */
   startGenerationProcess(input: GenerationProcessInput): GenerationProcessSnapshot {
     const task: GenerationProcessTask = {
       taskId: randomUUID(),
@@ -386,6 +409,7 @@ export class GenerationService {
     return this.toGenerationProcessSnapshot(task);
   }
 
+  /** Runs a multi-item generation process and waits for it to complete before returning. */
   async runGenerationProcessBlocking(input: GenerationProcessInput): Promise<GenerationProcessSnapshot> {
     const task: GenerationProcessTask = {
       taskId: randomUUID(),
@@ -414,6 +438,7 @@ export class GenerationService {
     return this.toGenerationProcessSnapshot(latest, true);
   }
 
+  /** Returns the snapshot of a generation process by task ID, or null if not found. */
   getGenerationProcess(taskId: string, includeItems = false): GenerationProcessSnapshot | null {
     const task = this.generationProcesses.get(taskId);
     if (!task) {
@@ -422,6 +447,7 @@ export class GenerationService {
     return this.toGenerationProcessSnapshot(task, includeItems);
   }
 
+  /** Lists generation processes, optionally filtered by status and requester. */
   listGenerationProcesses(options?: {
     limit?: number;
     status?: "running" | "completed" | "failed";
@@ -443,6 +469,7 @@ export class GenerationService {
       .map((task) => this.toGenerationProcessSnapshot(task));
   }
 
+  /** Runs a full batch generation cycle using concurrent workers across the category/language matrix. */
   async generateBatchModels(options?: BatchGenerationOptions): Promise<BatchGenerationResult> {
     const targetCount = options?.targetCount ?? this.config.BATCH_GENERATION_TARGET_COUNT;
     const maxAttempts = options?.maxAttempts ?? this.config.BATCH_GENERATION_MAX_ATTEMPTS;
@@ -505,6 +532,7 @@ export class GenerationService {
     return result;
   }
 
+  /** Forwards documents to ai-engine for RAG ingestion. */
   async ingestToRag(documents: IngestDocumentInput[], source?: string): Promise<IngestResponse> {
     const ingestSource = source ?? this.config.AI_ENGINE_INGEST_SOURCE ?? this.config.SERVICE_NAME;
     return this.client.ingest(documents, ingestSource);
@@ -523,6 +551,7 @@ export class GenerationService {
     createdAt: true,
   } as const;
 
+  /** Retrieves random stored models matching the given filters. */
   async randomModels(filters: RandomModelsFilters): Promise<StoredGameModel[]> {
     const where: Prisma.GameGenerationWhereInput = {
       gameType: "word-pass"
@@ -605,6 +634,7 @@ export class GenerationService {
     return selected.map((item) => this.mapStoredModel(item));
   }
 
+  /** Returns model counts aggregated by category, language, and their cross-product matrix. */
   async groupedModelsSummary(): Promise<GroupedModelsSummary> {
     if (this.groupedSummaryCache && Date.now() < this.groupedSummaryCache.expiresAt) {
       return this.groupedSummaryCache.data;
@@ -657,6 +687,7 @@ export class GenerationService {
     return result;
   }
 
+  /** Returns the most recent stored models, optionally filtered by category, language, or difficulty. */
   async history(limit = 20, filters?: HistoryFilters): Promise<StoredGameModel[]> {
     const normalizedLimit = Math.max(1, Math.min(1000, Math.trunc(limit)));
     const rows = await prisma.gameGeneration.findMany({
