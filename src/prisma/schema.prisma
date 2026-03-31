@@ -7,15 +7,20 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/// Stores AI-generated game content and its generation metadata
 model GameGeneration {
+  /// Unique identifier for the generation record
   id           String   @id @default(cuid())
   gameType     String
   query        String
   language     String
   status       String
+  /// Optional reference to a game category
   categoryId    String?
   categoryName  String?
+  /// Deduplication key to prevent duplicate generations
   uniquenessKey String?  @unique
+  /// Groups generations belonging to the same batch run
   batchRunId    String?
   requestJson  String
   responseJson String
