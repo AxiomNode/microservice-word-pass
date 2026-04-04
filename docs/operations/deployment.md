@@ -23,3 +23,10 @@ Stop and remove containers:
 ```bash
 docker compose down
 ```
+
+## Automated CI/CD path
+
+1. Push to `main` in this repository.
+2. `.github/workflows/ci.yml` dispatches `platform-infra` build for `microservice-wordpass`.
+3. `platform-infra` publishes the image to GHCR.
+4. `platform-infra` deploy workflow applies rollout to `dev`.

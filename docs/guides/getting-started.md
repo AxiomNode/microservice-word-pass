@@ -36,7 +36,7 @@ npm run dev
 5. Generate a word-pass session:
 
 ```bash
-curl -X POST http://localhost:7100/games/generate \
+curl -X POST http://localhost:7101/games/generate \
   -H "Content-Type: application/json" \
   -d '{"categoryId":"17","language":"es","difficultyPercentage":55,"numQuestions":7}'
 ```
@@ -44,13 +44,13 @@ curl -X POST http://localhost:7100/games/generate \
 6. Retrieve random models filtered by language and category:
 
 ```bash
-curl "http://localhost:7100/games/models/random?count=10&language=es&categoryId=17"
+curl "http://localhost:7101/games/models/random?count=10&language=es&categoryId=17"
 ```
 
 7. Group model counts by category and language:
 
 ```bash
-curl "http://localhost:7100/games/models/grouped"
+curl "http://localhost:7101/games/models/grouped"
 ```
 
 ## Fixed language policy

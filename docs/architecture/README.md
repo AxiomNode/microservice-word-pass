@@ -5,4 +5,4 @@ microservice-wordpass follows a simple layered design:
 - Service layer (ai-engine client + orchestration)
 - Persistence layer (Prisma)
 
-The service is scoped to one game type: \.
+The service is intentionally scoped to a single game type: `word-pass`.

@@ -1,37 +1,23 @@
-# Agents & Contribution Rules for microservice-wordpass
+# AGENTS
 
-Purpose
--------
-This document defines agent rules, development workflow, and code quality standards for the microservice-wordpass repository.
+## Repo purpose
+Word-pass generation and persistence microservice backed by ai-engine and PostgreSQL.
 
-Core Rules
-----------
-1) Git Flow
-   - Use:      - main (production)     - develop (integration)     - feature/*, release/*, hotfix/*.
+## Key paths
+- src/: Fastify handlers, business logic, Prisma, tests
+- docs/: architecture, guides, operations
+- .github/workflows/ci.yml: CI + infra dispatch
 
-2) TDD
-   - Write a failing test first.
-   - Implement the minimum code to pass.
-   - Refactor with tests green.
+## Local commands
+- cd src && npm install
+- cd src && npm run db:push && npm run dev
+- cd src && npm test && npm run lint && npm run build
 
-3) English-only docs
-   - All code comments, docs, and commit messages must be in English.
+## CI/CD notes
+- Push to main dispatches platform-infra build-push with service=microservice-wordpass.
+- Deployment to dev is automated from platform-infra.
 
-4) TypeScript quality bar
-   - Strict TypeScript enabled.
-   - ESLint + Prettier + Vitest required on every PR.
-   - Keep services small and dependency-injected.
-
-Enforcement & CI
-----------------
-- Required checks on every PR:
-  - npm run lint
-  - npm run test
-  - npm run build
-
-PR Checklist
-------------
-- Tests added/updated.
-- Docs updated.
-- No debug leftovers.
-- CI green before merge.
+## LLM editing rules
+- Keep generate/ingest/catalog endpoints stable.
+- Maintain parity between Prisma models and API response fields.
+- Update docs when changing ports, routes, or workflow behavior.
