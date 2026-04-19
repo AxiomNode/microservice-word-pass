@@ -3,7 +3,6 @@ import { z } from "zod";
 import { GenerationService } from "../services/generationService.js";
 import {
   BaseGenerateSchema,
-  IngestDocumentSchema,
   IngestSchema,
   RandomModelsQuerySchema,
   HistoryQuerySchema,
