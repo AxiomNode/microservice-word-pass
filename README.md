@@ -2,11 +2,25 @@
 
 TypeScript microservice for word-pass generation and persistence.
 
+## Architectural role
+
+`microservice-wordpass` is the word-pass game domain service responsible for generation orchestration, persistence of generated models, and retrieval APIs tailored to the word-pass gameplay domain.
+
+It depends on `ai-engine` for generation but owns domain validation, persistence, and retrieval behavior.
+
 ## Responsibilities
 
 - Request word-pass generation from `ai-engine`.
 - Persist generated word-pass models and history in PostgreSQL.
 - Expose generation and catalog endpoints for BFF consumers.
+
+## Primary use cases
+
+- request word-pass generation for a category and language
+- ingest externally generated word-pass payloads
+- retrieve reusable stored models
+- inspect historical generated artifacts
+- expose private docs and health endpoints used during release verification
 
 ## Stack
 
@@ -61,9 +75,21 @@ node scripts/prepare-runtime-secrets.mjs dev
   - Job `docker-smoke-private-docs`: validates container startup + private docs auth behavior.
   - Job `trigger-platform-infra-build`:
     - Runs on push to `main`.
+    - Waits for `build-test-lint-audit` and `docker-smoke-private-docs` to succeed before dispatching `platform-infra`.
     - Dispatches `platform-infra/.github/workflows/build-push.yaml` with `service=microservice-wordpass`.
     - Requires `PLATFORM_INFRA_DISPATCH_TOKEN` in this repo.
 
 ## Deployment automation chain
 
-Push to `main` triggers image rebuild in `platform-infra`, followed by automatic deployment to `dev`.
+Push to `main` triggers image rebuild in `platform-infra`, followed by automatic deployment to `stg`.
+
+## Resilience notes
+
+- This service should degrade gracefully when invalid persisted generated rows are encountered.
+- Retry and timeout behavior for `ai-engine` calls should remain explicit in configuration and test coverage.
+- Release confidence depends on both repository validation and central deployment validation.
+
+## Related documents
+
+- `docs/architecture/`
+- `docs/operations/`
