@@ -608,7 +608,7 @@ export class GenerationService {
         where: { id: { in: selectedIds } },
         select: GenerationService.storedModelSelect,
       });
-      return selected.map((item) => this.mapStoredModel(item));
+      return this.mapStoredModelsSafely(selected).slice(0, filters.count);
     }
 
     const candidates = await prisma.gameGeneration.findMany({
@@ -631,7 +631,7 @@ export class GenerationService {
     }
 
     const selected = shuffled.slice(0, Math.min(filters.count, shuffled.length));
-    return selected.map((item) => this.mapStoredModel(item));
+    return this.mapStoredModelsSafely(selected).slice(0, filters.count);
   }
 
   /** Returns model counts aggregated by category, language, and their cross-product matrix. */
@@ -701,7 +701,7 @@ export class GenerationService {
       take: typeof filters?.difficultyPercentage === "number" ? Math.min(1000, normalizedLimit * 20) : normalizedLimit
     });
 
-    let models = rows.map((item) => this.mapStoredModel(item));
+    let models = this.mapStoredModelsSafely(rows);
     if (typeof filters?.difficultyPercentage === "number") {
       const targetDifficulty = Math.max(0, Math.min(100, Math.trunc(filters.difficultyPercentage)));
       models = models.filter((item) => this.extractDifficultyFromRequest(item.request) === targetDifficulty);
@@ -876,7 +876,7 @@ export class GenerationService {
 
     const requestPayload: Record<string, string> = {
       query: input.query,
-      max_tokens: "512",
+      max_tokens: "1024",
       use_cache: "true",
       language
     };
@@ -984,10 +984,41 @@ export class GenerationService {
       status: item.status,
       categoryId: item.categoryId,
       categoryName: item.categoryName,
-      request: this.sanitizeGeneratedPayload(this.parseJson(item.requestJson)),
+      request: this.parseJson(item.requestJson),
       response: this.sanitizeGeneratedPayload(this.parseJson(item.responseJson)),
       createdAt: item.createdAt
     };
+  }
+
+  private mapStoredModelsSafely(
+    items: Array<{
+      id: string;
+      gameType: string;
+      query: string;
+      language: string;
+      status: string;
+      categoryId: string | null;
+      categoryName: string | null;
+      requestJson: string;
+      responseJson: string;
+      createdAt: Date;
+    }>
+  ): StoredGameModel[] {
+    const validItems: StoredGameModel[] = [];
+
+    for (const item of items) {
+      try {
+        validItems.push(this.mapStoredModel(item));
+      } catch (error) {
+        console.warn(
+          "Skipping invalid stored word-pass model",
+          item.id,
+          error instanceof Error ? error.message : "Unknown error"
+        );
+      }
+    }
+
+    return validItems;
   }
 
   private buildStoredRequestPayload(
