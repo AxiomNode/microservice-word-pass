@@ -163,6 +163,7 @@ interface StoredGameModel {
   categoryName: string | null;
   request: unknown;
   response: unknown;
+  responseValidationError?: string;
   createdAt: Date;
 }
 
@@ -701,7 +702,7 @@ export class GenerationService {
       take: typeof filters?.difficultyPercentage === "number" ? Math.min(1000, normalizedLimit * 20) : normalizedLimit
     });
 
-    let models = this.mapStoredModelsSafely(rows);
+    let models = this.mapStoredHistoryModels(rows);
     if (typeof filters?.difficultyPercentage === "number") {
       const targetDifficulty = Math.max(0, Math.min(100, Math.trunc(filters.difficultyPercentage)));
       models = models.filter((item) => this.extractDifficultyFromRequest(item.request) === targetDifficulty);
@@ -1019,6 +1020,79 @@ export class GenerationService {
     }
 
     return validItems;
+  }
+
+  private mapStoredHistoryModel(item: {
+    id: string;
+    gameType: string;
+    query: string;
+    language: string;
+    status: string;
+    categoryId: string | null;
+    categoryName: string | null;
+    requestJson: string;
+    responseJson: string;
+    createdAt: Date;
+  }): StoredGameModel {
+    const request = this.parseStoredJsonSafely(item.requestJson);
+    const response = this.parseStoredJsonSafely(item.responseJson);
+    const responseValidationError = this.validateStoredHistoryPayload(response.value, item.id, "word-pass");
+
+    return {
+      id: item.id,
+      gameType: item.gameType,
+      query: item.query,
+      language: item.language,
+      status: item.status,
+      categoryId: item.categoryId,
+      categoryName: item.categoryName,
+      request: request.value,
+      response: response.value,
+      ...(responseValidationError ? { responseValidationError } : {}),
+      createdAt: item.createdAt
+    };
+  }
+
+  private mapStoredHistoryModels(
+    items: Array<{
+      id: string;
+      gameType: string;
+      query: string;
+      language: string;
+      status: string;
+      categoryId: string | null;
+      categoryName: string | null;
+      requestJson: string;
+      responseJson: string;
+      createdAt: Date;
+    }>
+  ): StoredGameModel[] {
+    return items.map((item) => this.mapStoredHistoryModel(item));
+  }
+
+  private parseStoredJsonSafely(value: string): { value: unknown } {
+    try {
+      return { value: this.parseJson(value) };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      return {
+        value: {
+          raw: value,
+          parseError: message,
+        },
+      };
+    }
+  }
+
+  private validateStoredHistoryPayload(payload: unknown, itemId: string, gameLabel: string): string | undefined {
+    try {
+      this.sanitizeGeneratedPayload(payload);
+      return undefined;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      console.warn(`Stored ${gameLabel} history item is invalid but still exposed for backoffice`, itemId, message);
+      return message;
+    }
   }
 
   private buildStoredRequestPayload(

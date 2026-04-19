@@ -123,8 +123,9 @@ describe("GenerationService", () => {
     );
   });
 
-  it("skips invalid persisted word-pass entries in history instead of failing the whole request", async () => {
+  it("keeps invalid persisted word-pass entries visible in history with a validation error", async () => {
     const service = new GenerationService(createConfig());
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
     prismaMocks.findMany.mockResolvedValue([
       {
@@ -147,7 +148,7 @@ describe("GenerationService", () => {
         status: "created",
         categoryId: "9",
         categoryName: "General Knowledge",
-        requestJson: JSON.stringify({ language: "es", letters: "A,B,C" }),
+        requestJson: JSON.stringify({ language: "es", item_count: "3" }),
         responseJson: JSON.stringify({
           game_type: "word-pass",
           game: {
@@ -167,8 +168,17 @@ describe("GenerationService", () => {
 
     const result = await service.history(10, { language: "es" });
 
-    expect(result).toHaveLength(1);
-    expect(result[0]?.id).toBe("valid-word-pass");
-    expect(result[0]?.request).toEqual({ language: "es", letters: "A,B,C" });
+    expect(result).toHaveLength(2);
+    expect(result[0]?.id).toBe("invalid-word-pass");
+    expect(result[0]?.responseValidationError).toBe(
+      "Generated word-pass has no words — rejecting incomplete content"
+    );
+    expect(result[1]?.id).toBe("valid-word-pass");
+    expect(result[1]?.request).toEqual({ language: "es", item_count: "3" });
+    expect(warnSpy).toHaveBeenCalledWith(
+      "Stored word-pass history item is invalid but still exposed for backoffice",
+      "invalid-word-pass",
+      "Generated word-pass has no words — rejecting incomplete content"
+    );
   });
 });
