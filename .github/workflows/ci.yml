@@ -17,10 +17,12 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: src
+        working-directory: microservice-wordpass/src
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          path: microservice-wordpass
 
       - name: Validate cross-repo token
         run: |
@@ -37,7 +39,7 @@ jobs:
           token: ${{ secrets.CROSS_REPO_READ_TOKEN }}
 
       - name: Enforce tracked artifact policy
-        working-directory: .
+        working-directory: microservice-wordpass
         run: |
           set -euo pipefail
           forbidden=$(git ls-files | grep -E '(^|/)src/(node_modules|dist)/' || true)
@@ -52,7 +54,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: src/package-lock.json
+          cache-dependency-path: microservice-wordpass/src/package-lock.json
 
       - name: Build shared SDK package
         working-directory: shared-sdk-client/typescript
@@ -147,6 +149,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          path: microservice-wordpass
 
       - name: Validate cross-repo token
         run: |
@@ -171,11 +175,11 @@ jobs:
 
       - name: Prepare env file
         run: |
-          cp src/.env.example src/.env
-          : > src/.env.secrets
+          cp microservice-wordpass/src/.env.example microservice-wordpass/src/.env
+          : > microservice-wordpass/src/.env.secrets
 
       - name: Start stack
-        run: docker compose -f docker-compose.yml up -d --build
+        run: docker compose -f microservice-wordpass/docker-compose.yml up -d --build
 
       - name: Wait for health endpoint
         run: |
@@ -221,8 +225,8 @@ jobs:
 
       - name: Dump logs on failure
         if: failure()
-        run: docker compose -f docker-compose.yml logs --no-color || true
+        run: docker compose -f microservice-wordpass/docker-compose.yml logs --no-color || true
 
       - name: Stop stack
         if: always()
-        run: docker compose -f docker-compose.yml down -v
+        run: docker compose -f microservice-wordpass/docker-compose.yml down -v
