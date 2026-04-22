@@ -1,0 +1,43 @@
+
+> microservice-wordpass@0.1.0 test:coverage
+> vitest run --coverage
+
+
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.8 [39m[90mC:/Users/sebss/Documents/AxiomNode/microservice-wordpass/src[39m
+      [2mCoverage enabled with [22m[33mv8[39m
+
+ [32m✓[39m tests/dbClient.test.ts [2m([22m[2m1 test[22m[2m)[22m[90m 23[2mms[22m[39m
+ [31m❯[39m tests/modelGenerationJob.test.ts [2m([22m[2m3 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[90m 11[2mms[22m[39m
+[31m   [31m×[31m ModelGenerationJob[2m > [22mstarts the scheduler, runs a startup cycle and can stop the interval[90m 5[2mms[22m[31m[39m
+[31m     → Calling the test function inside another test function is not allowed. Please put it inside "describe" or "suite" so it can be properly collected.[39m
+ [32m✓[39m tests/serviceMetrics.test.ts [2m([22m[2m3 tests[22m[2m)[22m[90m 12[2mms[22m[39m
+ [32m✓[39m tests/config.test.ts [2m([22m[2m6 tests[22m[2m)[22m[90m 6[2mms[22m[39m
+[90mstderr[2m | tests/generationService.test.ts[2m > [22m[2mGenerationService[2m > [22m[2mcovers internal helpers for uniqueness, normalization and parsing
+[22m[39mStored word-pass history item is invalid but still exposed for backoffice item-1 Generated word-pass has no words — rejecting incomplete content
+
+ [32m✓[39m tests/generationService.test.ts [2m([22m[2m25 tests[22m[2m)[22m[90m 34[2mms[22m[39m
+ [32m✓[39m tests/health.test.ts [2m([22m[2m1 test[22m[2m)[22m[90m 216[2mms[22m[39m
+ [32m✓[39m tests/monitoring.test.ts [2m([22m[2m3 tests[22m[2m)[22m[90m 221[2mms[22m[39m
+ [32m✓[39m tests/privateDocs.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 320[2mms[22m[39m
+   [33m[2m✓[22m[39m private docs plugin[2m > [22mprotects /private/docs/json with token [33m313[2mms[22m[39m
+ [32m✓[39m tests/gamesRoutes.test.ts [2m([22m[2m11 tests[22m[2m)[22m[90m 254[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[1m[7m Failed Tests 1 [27m[22m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[31m[1m[7m FAIL [27m[22m[39m tests/modelGenerationJob.test.ts[2m > [22mModelGenerationJob[2m > [22mstarts the scheduler, runs a startup cycle and can stop the interval
+[31m[1mError[22m: Calling the test function inside another test function is not allowed. Please put it inside "describe" or "suite" so it can be properly collected.[39m
+[36m [2m❯[22m tests/modelGenerationJob.test.ts:[2m90:7[22m[39m
+    [90m 88| [39m    [35mconst[39m clearIntervalSpy [33m=[39m vi[33m.[39m[34mspyOn[39m(globalThis[33m,[39m [32m"clearInterval"[39m)[33m.[39m[34mmoc[39m…
+    [90m 89| [39m
+    [90m 90| [39m      [34mit[39m([32m"runs an interval cycle after the scheduler starts"[39m[33m,[39m [35masync[39m ()…
+    [90m   | [39m      [31m^[39m
+    [90m 91| [39m        vi[33m.[39m[34museFakeTimers[39m()[33m;[39m
+    [90m 92| [39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m8 passed[39m[22m[90m (9)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m57 passed[39m[22m[90m (58)[39m
+[2m   Start at [22m 19:16:26
+[2m   Duration [22m 1.16s[2m (transform 918ms, setup 0ms, collect 2.05s, tests 1.10s, environment 2ms, prepare 1.41s)[22m
+

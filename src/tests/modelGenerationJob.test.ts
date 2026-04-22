@@ -86,53 +86,6 @@ describe("ModelGenerationJob", () => {
     const timerHandle = { hasRef: () => true } as unknown as NodeJS.Timeout;
     const setIntervalSpy = vi.spyOn(globalThis, "setInterval").mockReturnValue(timerHandle);
     const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval").mockImplementation(() => undefined);
-
-      it("runs an interval cycle after the scheduler starts", async () => {
-        vi.useFakeTimers();
-
-        const logger = createLogger();
-        const generationService = {
-          runAiAuthSmokeCheck: vi.fn().mockResolvedValue({ ok: true }),
-          refreshCatalogs: vi.fn().mockResolvedValue({ source: "seed", categories: [], languages: [] }),
-          generateBatchModels: vi.fn().mockResolvedValue({ requested: 1, attempts: 1, created: 1, duplicates: 0, failed: 0 }),
-        };
-
-        const job = new ModelGenerationJob(createConfig({ BATCH_GENERATION_INTERVAL_MINUTES: 1 }), generationService as never);
-
-        job.start(logger as never);
-        await flushMicrotasks();
-
-        generationService.runAiAuthSmokeCheck.mockClear();
-        generationService.refreshCatalogs.mockClear();
-        generationService.generateBatchModels.mockClear();
-
-        await vi.advanceTimersByTimeAsync(60_000);
-        await flushMicrotasks();
-
-        expect(generationService.runAiAuthSmokeCheck).toHaveBeenCalledTimes(1);
-        expect(generationService.refreshCatalogs).toHaveBeenCalledTimes(1);
-        expect(generationService.generateBatchModels).toHaveBeenCalledTimes(1);
-
-        job.stop();
-      });
-
-      it("logs the message from thrown Error instances during a cycle", async () => {
-        const logger = createLogger();
-        const generationService = {
-          runAiAuthSmokeCheck: vi.fn().mockResolvedValue({ ok: true }),
-          refreshCatalogs: vi.fn().mockRejectedValue(new Error("catalog refresh failed")),
-          generateBatchModels: vi.fn(),
-        };
-
-        const job = new ModelGenerationJob(createConfig(), generationService as never);
-
-        await (job as any).runCycle(logger, "interval");
-
-        expect(logger.error).toHaveBeenCalledWith(
-          expect.objectContaining({ trigger: "interval", error: "catalog refresh failed" }),
-          "Periodic model generation cycle failed",
-        );
-      });
     const job = new ModelGenerationJob(createConfig({ BATCH_GENERATION_INTERVAL_MINUTES: 5 }), generationService as never);
 
     job.start(logger as never);
@@ -152,6 +105,53 @@ describe("ModelGenerationJob", () => {
     job.stop();
 
     expect(clearIntervalSpy).toHaveBeenCalled();
+  });
+
+  it("runs an interval cycle after the scheduler starts", async () => {
+    vi.useFakeTimers();
+
+    const logger = createLogger();
+    const generationService = {
+      runAiAuthSmokeCheck: vi.fn().mockResolvedValue({ ok: true }),
+      refreshCatalogs: vi.fn().mockResolvedValue({ source: "seed", categories: [], languages: [] }),
+      generateBatchModels: vi.fn().mockResolvedValue({ requested: 1, attempts: 1, created: 1, duplicates: 0, failed: 0 }),
+    };
+
+    const job = new ModelGenerationJob(createConfig({ BATCH_GENERATION_INTERVAL_MINUTES: 1 }), generationService as never);
+
+    job.start(logger as never);
+    await flushMicrotasks();
+
+    generationService.runAiAuthSmokeCheck.mockClear();
+    generationService.refreshCatalogs.mockClear();
+    generationService.generateBatchModels.mockClear();
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    await flushMicrotasks();
+
+    expect(generationService.runAiAuthSmokeCheck).toHaveBeenCalledTimes(1);
+    expect(generationService.refreshCatalogs).toHaveBeenCalledTimes(1);
+    expect(generationService.generateBatchModels).toHaveBeenCalledTimes(1);
+
+    job.stop();
+  });
+
+  it("logs the message from thrown Error instances during a cycle", async () => {
+    const logger = createLogger();
+    const generationService = {
+      runAiAuthSmokeCheck: vi.fn().mockResolvedValue({ ok: true }),
+      refreshCatalogs: vi.fn().mockRejectedValue(new Error("catalog refresh failed")),
+      generateBatchModels: vi.fn(),
+    };
+
+    const job = new ModelGenerationJob(createConfig(), generationService as never);
+
+    await (job as any).runCycle(logger, "interval");
+
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ trigger: "interval", error: "catalog refresh failed" }),
+      "Periodic model generation cycle failed",
+    );
   });
 
   it("skips overlapping cycles, logs auth smoke failures and catches unknown errors", async () => {

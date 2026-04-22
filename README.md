@@ -1,5 +1,7 @@
 # microservice-wordpass
 
+[![codecov](https://codecov.io/gh/AxiomNode/microservice-wordpass/branch/main/graph/badge.svg)](https://codecov.io/gh/AxiomNode/microservice-wordpass)
+
 TypeScript microservice for word-pass generation and persistence.
 
 ## Architectural role
