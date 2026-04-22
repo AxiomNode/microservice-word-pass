@@ -14,6 +14,17 @@ It depends on `ai-engine` for generation but owns domain validation, persistence
 - Persist generated word-pass models and history in PostgreSQL.
 - Expose generation and catalog endpoints for BFF consumers.
 
+## Ownership boundary
+
+`microservice-wordpass` owns word-pass-domain correctness even when generation originates in `ai-engine`.
+
+That includes:
+
+- request shaping for word-pass generation
+- validation of letters, hints, and topic coherence
+- persistence of valid domain payloads
+- retrieval semantics for reusable stored models
+
 ## Primary use cases
 
 - request word-pass generation for a category and language
@@ -61,6 +72,22 @@ node scripts/prepare-runtime-secrets.mjs dev
 - `GET /games/models/grouped`
 - `GET /games/history`
 
+## Dependency model
+
+Primary infrastructure dependency:
+
+- PostgreSQL
+
+Primary service dependencies:
+
+- `ai-engine-api`
+- `ai-engine-stats` via shared instrumentation paths where applicable
+
+Primary consumers:
+
+- `bff-mobile`
+- `bff-backoffice`
+
 ## Private docs
 
 - Route: `/private/docs`
@@ -88,6 +115,13 @@ Push to `main` triggers image rebuild in `platform-infra`, followed by automatic
 - This service should degrade gracefully when invalid persisted generated rows are encountered.
 - Retry and timeout behavior for `ai-engine` calls should remain explicit in configuration and test coverage.
 - Release confidence depends on both repository validation and central deployment validation.
+
+## Failure boundaries
+
+- upstream AI returns malformed or weak domain content
+- generation request times out or is rejected because AI runtime is busy
+- persistence fails after successful validation
+- stored invalid rows degrade random selection or history endpoints
 
 ## Related documents
 

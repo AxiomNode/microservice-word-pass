@@ -22,11 +22,14 @@ model GameGeneration {
   uniquenessKey String?  @unique
   /// Groups generations belonging to the same batch run
   batchRunId    String?
+  difficultyPercentage Int?
   requestJson  String
   responseJson String
   createdAt    DateTime @default(now())
 
   @@index([gameType, createdAt])
+  @@index([gameType, difficultyPercentage, createdAt])
   @@index([gameType, language, categoryId, createdAt])
+  @@index([gameType, language, categoryId, difficultyPercentage, createdAt])
   @@index([gameType, categoryId, language])
 }

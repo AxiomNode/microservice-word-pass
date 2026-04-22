@@ -10,6 +10,7 @@ import {
   GenerationProcessQuerySchema,
   GenerationProcessesListQuerySchema,
   ManualHistoryEntrySchema,
+  ManualHistoryUpdateSchema,
   HistoryItemParamsSchema,
 } from "@axiomnode/shared-sdk-client";
 
@@ -141,6 +142,7 @@ export async function gameRoutes(
       });
     }
 
+    /* v8 ignore next -- Fastify always materializes request.query for matched routes; the nullish fallback is defensive only */
     const query = GenerationProcessQuerySchema.safeParse(request.query ?? {});
     if (!query.success) {
       return reply.status(400).send({
@@ -229,12 +231,15 @@ export async function gameRoutes(
       });
     }
 
-    const items = await generationService.history(parsed.data.limit, {
+    const page = await generationService.historyPage(parsed.data.limit, {
+      page: parsed.data.page,
+      pageSize: parsed.data.pageSize,
       categoryId: parsed.data.categoryId,
       language: parsed.data.language,
       difficultyPercentage: parsed.data.difficultyPercentage,
+      status: parsed.data.status,
     });
-    return reply.send({ gameType: "word-pass", items });
+    return reply.send({ gameType: "word-pass", ...page });
   });
 
   app.post("/games/history/manual", async (request, reply) => {
@@ -281,6 +286,43 @@ export async function gameRoutes(
       deleted: true,
       id: parsed.data.entryId
     });
+  });
+
+  app.patch("/games/history/:entryId", async (request, reply) => {
+    const parsedParams = HistoryItemParamsSchema.safeParse(request.params ?? {});
+    if (!parsedParams.success) {
+      return reply.status(400).send({
+        message: "Invalid path parameters",
+        errors: parsedParams.error.flatten()
+      });
+    }
+
+    const parsed = ManualHistoryUpdateSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.status(400).send({
+        message: "Invalid payload",
+        errors: parsed.error.flatten()
+      });
+    }
+
+    try {
+      const item = await generationService.updateHistoryItem(parsedParams.data.entryId, parsed.data);
+      if (!item) {
+        return reply.status(404).send({ message: "History entry not found" });
+      }
+
+      return reply.send({
+        gameType: "word-pass",
+        item
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      const statusCode = /duplicate/i.test(message) ? 409 : 400;
+      return reply.status(statusCode).send({
+        message: "Failed to update manual model",
+        error: message
+      });
+    }
   });
 
   app.get("/games/models/grouped", async (_request, reply) => {

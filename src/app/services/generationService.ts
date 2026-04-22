@@ -54,6 +54,7 @@ export interface GenerateInput {
   categoryId: string;
   language: string;
   difficultyPercentage?: number;
+  itemCount?: number;
   numQuestions?: number;
   letters?: string;
   requestedBy?: "api" | "backoffice";
@@ -65,7 +66,15 @@ export interface ManualModelInput {
   language: string;
   difficultyPercentage: number;
   content: Record<string, unknown>;
-  status?: "manual" | "validated";
+  status?: "manual" | "validated" | "pending_review";
+}
+
+export interface ManualModelUpdateInput {
+  categoryId?: string;
+  language?: string;
+  difficultyPercentage?: number;
+  content?: Record<string, unknown>;
+  status?: "manual" | "validated" | "pending_review";
 }
 
 /** Input parameters for a multi-item generation process. */
@@ -118,6 +127,14 @@ export interface HistoryFilters {
   categoryId?: string;
   language?: string;
   difficultyPercentage?: number;
+  status?: string;
+}
+
+export interface HistoryPageResult {
+  items: StoredGameModel[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 /** Aggregated model counts grouped by category, language, and their matrix. */
@@ -320,13 +337,13 @@ export class GenerationService {
   async generateAndStore(input: GenerateInput): Promise<unknown> {
     const category = this.getCategoryOrThrow(input.categoryId);
     const language = this.getLanguageOrThrow(input.language);
+    const itemCount = this.resolveRequestedItemCount(input);
 
     const resolved = this.buildResolvedInput(Math.floor(Math.random() * 10_000), category, language);
     const result = await this.generateAndStoreWithResult({
       ...resolved,
       difficultyPercentage: input.difficultyPercentage,
-      numQuestions: input.numQuestions,
-      letters: input.letters
+      itemCount
     });
 
     return result.responsePayload;
@@ -360,6 +377,7 @@ export class GenerationService {
         categoryId: category.id,
         categoryName: category.name,
         uniquenessKey,
+        difficultyPercentage: difficulty,
         requestJson: JSON.stringify({
           source: "backoffice-manual",
           categoryId: category.id,
@@ -382,6 +400,71 @@ export class GenerationService {
       },
     });
     return deleted.count > 0;
+  }
+
+  async updateHistoryItem(id: string, input: ManualModelUpdateInput): Promise<StoredGameModel | null> {
+    const existing = await prisma.gameGeneration.findFirst({
+      where: { id, gameType: "word-pass" },
+      select: GenerationService.storedModelSelect,
+    });
+
+    if (!existing) {
+      return null;
+    }
+
+    const nextCategoryId = input.categoryId ?? existing.categoryId ?? undefined;
+    const nextLanguage = input.language ?? existing.language;
+    const nextDifficulty = typeof input.difficultyPercentage === "number"
+      ? Math.max(0, Math.min(100, Math.trunc(input.difficultyPercentage)))
+      : existing.difficultyPercentage ?? this.extractDifficultyFromRequest(this.parseJson(existing.requestJson));
+
+    if (!nextCategoryId) {
+      throw new Error("Category is required");
+    }
+
+    const category = this.getCategoryOrThrow(nextCategoryId);
+    const language = this.getLanguageOrThrow(nextLanguage);
+    const currentResponse = this.parseJson(existing.responseJson) as Record<string, unknown>;
+    const normalizedContent = input.content
+      ? this.normalizeManualContent(input.content)
+      : this.normalizeManualContent(currentResponse);
+    const query = `${category.name} manual curation ${language} difficulty ${nextDifficulty}`;
+    const uniquenessKey = this.buildUniquenessKey("word-pass", normalizedContent, language);
+
+    const duplicate = await prisma.gameGeneration.findFirst({
+      where: {
+        uniquenessKey,
+        NOT: { id },
+      },
+      select: { id: true },
+    });
+
+    if (duplicate) {
+      throw new Error("Duplicate content");
+    }
+
+    const updated = await prisma.gameGeneration.update({
+      where: { id },
+      data: {
+        query,
+        language,
+        status: input.status ?? existing.status,
+        categoryId: category.id,
+        categoryName: category.name,
+        uniquenessKey,
+        difficultyPercentage: nextDifficulty,
+        requestJson: JSON.stringify({
+          source: "backoffice-manual",
+          categoryId: category.id,
+          language,
+          difficulty_percentage: nextDifficulty,
+        }),
+        responseJson: JSON.stringify(normalizedContent),
+      },
+      select: GenerationService.storedModelSelect,
+    });
+
+    return this.mapStoredModel(updated);
   }
 
   /** Starts an asynchronous multi-item generation process (fire-and-forget). */
@@ -467,7 +550,7 @@ export class GenerationService {
       })
       .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
       .slice(0, Math.max(1, limit))
-      .map((task) => this.toGenerationProcessSnapshot(task));
+        .map((task) => this.toGenerationProcessSnapshot(task, false));
   }
 
   /** Runs a full batch generation cycle using concurrent workers across the category/language matrix. */
@@ -547,6 +630,7 @@ export class GenerationService {
     status: true,
     categoryId: true,
     categoryName: true,
+    difficultyPercentage: true,
     requestJson: true,
     responseJson: true,
     createdAt: true,
@@ -555,7 +639,8 @@ export class GenerationService {
   /** Retrieves random stored models matching the given filters. */
   async randomModels(filters: RandomModelsFilters): Promise<StoredGameModel[]> {
     const where: Prisma.GameGenerationWhereInput = {
-      gameType: "word-pass"
+      gameType: "word-pass",
+      ...(filters.status ? {} : { status: { not: "pending_review" } }),
     };
 
     if (filters.language) {
@@ -567,6 +652,9 @@ export class GenerationService {
     if (filters.status) {
       where.status = filters.status;
     }
+    if (typeof filters.difficultyPercentage === "number") {
+      where.difficultyPercentage = Math.max(0, Math.min(100, Math.trunc(filters.difficultyPercentage)));
+    }
     if (filters.createdAfter || filters.createdBefore) {
       where.createdAt = {
         ...(filters.createdAfter ? { gte: filters.createdAfter } : {}),
@@ -575,42 +663,6 @@ export class GenerationService {
     }
 
     const poolSize = Math.min(1000, Math.max(filters.count * 30, 300));
-
-    if (typeof filters.difficultyPercentage === "number") {
-      const targetDifficulty = Math.max(0, Math.min(100, Math.trunc(filters.difficultyPercentage)));
-      const lightCandidates = await prisma.gameGeneration.findMany({
-        where,
-        select: { id: true, requestJson: true },
-        orderBy: { createdAt: "desc" },
-        take: poolSize
-      });
-
-      const matchingIds = lightCandidates
-        .filter((item) => {
-          const requestPayload = this.parseJson(item.requestJson);
-          return this.extractDifficultyFromRequest(requestPayload) === targetDifficulty;
-        })
-        .map((item) => item.id);
-
-      if (matchingIds.length === 0) {
-        return [];
-      }
-
-      const shuffled = [...matchingIds];
-      for (let index = shuffled.length - 1; index > 0; index -= 1) {
-        const swapIndex = Math.floor(Math.random() * (index + 1));
-        const current = shuffled[index];
-        shuffled[index] = shuffled[swapIndex];
-        shuffled[swapIndex] = current;
-      }
-
-      const selectedIds = shuffled.slice(0, Math.min(filters.count, shuffled.length));
-      const selected = await prisma.gameGeneration.findMany({
-        where: { id: { in: selectedIds } },
-        select: GenerationService.storedModelSelect,
-      });
-      return this.mapStoredModelsSafely(selected).slice(0, filters.count);
-    }
 
     const candidates = await prisma.gameGeneration.findMany({
       where,
@@ -696,19 +748,50 @@ export class GenerationService {
         gameType: "word-pass",
         ...(filters?.categoryId ? { categoryId: this.getCategoryOrThrow(filters.categoryId).id } : {}),
         ...(filters?.language ? { language: this.getLanguageOrThrow(filters.language) } : {}),
+        ...(typeof filters?.difficultyPercentage === "number"
+          ? { difficultyPercentage: Math.max(0, Math.min(100, Math.trunc(filters.difficultyPercentage))) }
+          : {}),
       },
       select: GenerationService.storedModelSelect,
       orderBy: { createdAt: "desc" },
-      take: typeof filters?.difficultyPercentage === "number" ? Math.min(1000, normalizedLimit * 20) : normalizedLimit
+      take: normalizedLimit
     });
 
-    let models = this.mapStoredHistoryModels(rows);
-    if (typeof filters?.difficultyPercentage === "number") {
-      const targetDifficulty = Math.max(0, Math.min(100, Math.trunc(filters.difficultyPercentage)));
-      models = models.filter((item) => this.extractDifficultyFromRequest(item.request) === targetDifficulty);
-    }
+    return this.mapStoredHistoryModels(rows).slice(0, normalizedLimit);
+  }
 
-    return models.slice(0, normalizedLimit);
+  async historyPage(limit = 20, options?: HistoryFilters & { page?: number; pageSize?: number }): Promise<HistoryPageResult> {
+    const normalizedLimit = Math.max(1, Math.min(1000, Math.trunc(limit)));
+    const normalizedPage = Math.max(1, Math.trunc(options?.page ?? 1));
+    const normalizedPageSize = Math.max(1, Math.min(200, Math.trunc(options?.pageSize ?? Math.min(20, normalizedLimit))));
+    const skip = (normalizedPage - 1) * normalizedPageSize;
+    const where = {
+      gameType: "word-pass",
+      ...(options?.categoryId ? { categoryId: this.getCategoryOrThrow(options.categoryId).id } : {}),
+      ...(options?.language ? { language: this.getLanguageOrThrow(options.language) } : {}),
+      ...(options?.status ? { status: options.status } : {}),
+      ...(typeof options?.difficultyPercentage === "number"
+        ? { difficultyPercentage: Math.max(0, Math.min(100, Math.trunc(options.difficultyPercentage))) }
+        : {}),
+    } as const;
+
+    const [total, rows] = await Promise.all([
+      prisma.gameGeneration.count({ where }),
+      prisma.gameGeneration.findMany({
+        where,
+        select: GenerationService.storedModelSelect,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: normalizedPageSize,
+      }),
+    ]);
+
+    return {
+      items: this.mapStoredHistoryModels(rows),
+      total,
+      page: normalizedPage,
+      pageSize: normalizedPageSize,
+    };
   }
 
   private async runGenerationProcess(taskId: string, input: GenerationProcessInput): Promise<void> {
@@ -724,11 +807,11 @@ export class GenerationService {
 
       const processOne = async (index: number): Promise<void> => {
         const resolved = this.buildResolvedInput(index, category, language);
+        const itemCount = this.resolveRequestedItemCount(input) ?? resolved.numQuestions;
         const payload: ResolvedGenerateInput = {
           ...resolved,
           difficultyPercentage: input.difficultyPercentage ?? resolved.difficultyPercentage,
-          numQuestions: input.numQuestions ?? resolved.numQuestions,
-          letters: input.letters ?? resolved.letters
+          itemCount
         };
 
         try {
@@ -808,7 +891,7 @@ export class GenerationService {
       startedAt: task.startedAt,
       updatedAt: task.updatedAt,
       ...(task.finishedAt ? { finishedAt: task.finishedAt } : {}),
-      ...(includeItems || task.status !== "running" ? { generatedItems: task.generatedItems } : {}),
+      ...(includeItems ? { generatedItems: task.generatedItems } : {}),
       ...(task.errors.length > 0 ? { errors: task.errors } : {})
     };
   }
@@ -868,6 +951,10 @@ export class GenerationService {
     return Math.floor(Math.random() * (upper - lower + 1)) + lower;
   }
 
+  private resolveRequestedItemCount(input: { itemCount?: number; numQuestions?: number }): number | undefined {
+    return input.itemCount ?? input.numQuestions;
+  }
+
   private async generateAndStoreWithResult(
     input: ResolvedGenerateInput,
     metadata?: GenerateStoreMetadata
@@ -882,14 +969,11 @@ export class GenerationService {
       language
     };
 
-    if (input.numQuestions) {
-      requestPayload.num_questions = String(input.numQuestions);
+    if (input.itemCount) {
+      requestPayload.item_count = String(input.itemCount);
     }
     if (typeof input.difficultyPercentage === "number") {
       requestPayload.difficulty_percentage = String(input.difficultyPercentage);
-    }
-    if (input.letters) {
-      requestPayload.letters = input.letters;
     }
 
     this.ensureAiAuthCircuitClosed();
@@ -920,7 +1004,8 @@ export class GenerationService {
       };
     }
 
-        const requestPayloadForStorage = this.buildStoredRequestPayload(requestPayload, category, language);
+    const requestPayloadForStorage = this.buildStoredRequestPayload(requestPayload, category, language);
+    const storedDifficulty = this.extractDifficultyFromRequest(requestPayloadForStorage);
 
     try {
       await prisma.gameGeneration.create({
@@ -933,6 +1018,7 @@ export class GenerationService {
           categoryName: metadata?.category?.name ?? category.name,
           uniquenessKey,
           batchRunId: metadata?.batchRunId,
+          difficultyPercentage: storedDifficulty,
           requestJson: JSON.stringify(requestPayloadForStorage),
           responseJson: JSON.stringify(sanitizedResponsePayload)
         }
@@ -991,37 +1077,6 @@ export class GenerationService {
     };
   }
 
-  private mapStoredModelsSafely(
-    items: Array<{
-      id: string;
-      gameType: string;
-      query: string;
-      language: string;
-      status: string;
-      categoryId: string | null;
-      categoryName: string | null;
-      requestJson: string;
-      responseJson: string;
-      createdAt: Date;
-    }>
-  ): StoredGameModel[] {
-    const validItems: StoredGameModel[] = [];
-
-    for (const item of items) {
-      try {
-        validItems.push(this.mapStoredModel(item));
-      } catch (error) {
-        console.warn(
-          "Skipping invalid stored word-pass model",
-          item.id,
-          error instanceof Error ? error.message : "Unknown error"
-        );
-      }
-    }
-
-    return validItems;
-  }
-
   private mapStoredHistoryModel(item: {
     id: string;
     gameType: string;
@@ -1051,6 +1106,37 @@ export class GenerationService {
       ...(responseValidationError ? { responseValidationError } : {}),
       createdAt: item.createdAt
     };
+  }
+
+  private mapStoredModelsSafely(
+    items: Array<{
+      id: string;
+      gameType: string;
+      query: string;
+      language: string;
+      status: string;
+      categoryId: string | null;
+      categoryName: string | null;
+      requestJson: string;
+      responseJson: string;
+      createdAt: Date;
+    }>
+  ): StoredGameModel[] {
+    const validItems: StoredGameModel[] = [];
+
+    for (const item of items) {
+      try {
+        validItems.push(this.mapStoredModel(item));
+      } catch (error) {
+        console.warn(
+          "Skipping invalid stored word-pass model",
+          item.id,
+          error instanceof Error ? error.message : "Unknown error"
+        );
+      }
+    }
+
+    return validItems;
   }
 
   private mapStoredHistoryModels(

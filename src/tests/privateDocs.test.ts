@@ -88,4 +88,34 @@ describe("private docs plugin", () => {
     expect(authorized.statusCode).toBe(200);
     await app.close();
   });
+
+  it("does not register docs routes when the feature is disabled", async () => {
+    const app = Fastify();
+    await app.register(swagger, {
+      openapi: { info: { title: "test", version: "1.0.0" } }
+    });
+
+    await registerPrivateDocs(app, baseConfig({ PRIVATE_DOCS_ENABLED: false }));
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/private/docs/json"
+    });
+
+    expect(response.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it("throws when docs are enabled but no token can be resolved", async () => {
+    const app = Fastify();
+    await app.register(swagger, {
+      openapi: { info: { title: "test", version: "1.0.0" } }
+    });
+
+    await expect(
+      registerPrivateDocs(app, baseConfig({ PRIVATE_DOCS_TOKEN: undefined, AI_ENGINE_API_KEY: undefined }))
+    ).rejects.toThrow("Private docs are enabled but no token is configured");
+
+    await app.close();
+  });
 });

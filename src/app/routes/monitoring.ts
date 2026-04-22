@@ -45,6 +45,7 @@ export async function monitoringRoutes(
   });
 
   app.get("/monitor/logs", async (request, reply) => {
+    /* v8 ignore next -- Fastify always materializes request.query for matched routes; the nullish fallback is defensive only */
     const parsed = LogsQuerySchema.safeParse(request.query ?? {});
     if (!parsed.success) {
       return reply.status(400).send({
