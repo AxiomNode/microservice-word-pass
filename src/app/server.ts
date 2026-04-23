@@ -12,6 +12,7 @@ import { gameRoutes } from "./routes/games.js";
 import { healthRoutes } from "./routes/health.js";
 import { GenerationService } from "./services/generationService.js";
 import { ModelGenerationJob } from "./services/modelGenerationJob.js";
+import { RuntimeGenerationWorker } from "./services/runtimeGenerationWorker.js";
 import { monitoringRoutes } from "./routes/monitoring.js";
 import { ServiceMetrics } from "./services/serviceMetrics.js";
 
@@ -47,6 +48,8 @@ async function buildServer() {
     onOutboundRequest: (metric) => metrics.recordOutboundRequest(metric)
   });
   const generationJob = new ModelGenerationJob(config, generationService);
+  const runtimeGenerationWorker = new RuntimeGenerationWorker(generationService);
+  runtimeGenerationWorker.bindLogger(app.log);
 
   app.addHook("onRequest", async (request) => {
     const requestAny = request as typeof request & {
@@ -103,15 +106,21 @@ async function buildServer() {
   });
 
   await healthRoutes(app);
-  await gameRoutes(app, generationService, (total) => metrics.recordIngestedDocuments(total));
+  await gameRoutes(
+    app,
+    generationService,
+    (total) => metrics.recordIngestedDocuments(total),
+    runtimeGenerationWorker
+  );
   await monitoringRoutes(app, metrics, generationService);
 
   app.addHook("onClose", async () => {
+    runtimeGenerationWorker.dispose();
     generationJob.stop();
     await prisma.$disconnect();
   });
 
-  return { app, config, generationJob, generationService, metrics };
+  return { app, config, generationJob, generationService, runtimeGenerationWorker, metrics };
 }
 
 /** Starts the server, initializes catalogs, and launches the periodic generation job. */
