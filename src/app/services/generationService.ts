@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import {
+  type AiAuthCircuitState,
   buildCategoryDimensionMatrix,
   buildStoredRequestPayload,
   extractAiEngineStatusCode as extractAiEngineStatusCodeShared,
@@ -10,6 +11,8 @@ import {
   mapStoredModel as mapStoredModelShared,
   mapStoredModelsSafely as mapStoredModelsSafelyShared,
   parseStoredJsonSafely as parseStoredJsonSafelyShared,
+  registerAiAuthFailureState,
+  registerAiAuthSuccessState,
   type StoredGameRow,
   validateStoredHistoryPayload as validateStoredHistoryPayloadShared,
 } from "@axiomnode/shared-sdk-client";
@@ -1256,30 +1259,42 @@ export class GenerationService {
   }
 
   private registerAiAuthSuccess(): void {
-    const hasChanges = this.aiAuthFailureStreak > 0 || this.aiAuthCircuitOpenedUntilMs > 0;
-    this.aiAuthFailureStreak = 0;
-    this.aiAuthCircuitOpenedUntilMs = 0;
-    if (hasChanges) {
+    const transition = registerAiAuthSuccessState(this.getAiAuthCircuitState());
+    this.applyAiAuthCircuitState(transition.state);
+    if (transition.shouldEmit) {
       this.emitAiAuthCircuitState();
     }
   }
 
   private registerAiAuthFailure(error: unknown): void {
-    const statusCode = this.extractAiEngineStatusCode(error);
-    if (statusCode !== 401 && statusCode !== 403) {
-      return;
+    const transition = registerAiAuthFailureState(this.getAiAuthCircuitState(), {
+      statusCode: this.extractAiEngineStatusCode(error),
+      failureThreshold: this.aiAuthFailureThreshold,
+      cooldownMs: this.aiAuthCircuitCooldownMs,
+      nowMs: Date.now(),
+    });
+    this.applyAiAuthCircuitState(transition.state);
+    if (transition.shouldEmit) {
+      this.emitAiAuthCircuitState();
     }
-
-    this.aiAuthFailureStreak += 1;
-    if (this.aiAuthFailureStreak >= this.aiAuthFailureThreshold) {
-      this.aiAuthCircuitOpenedUntilMs = Date.now() + this.aiAuthCircuitCooldownMs;
-      this.aiAuthCircuitOpenedTotal += 1;
-    }
-    this.emitAiAuthCircuitState();
   }
 
   private emitAiAuthCircuitState(): void {
     this.observer?.onAiAuthCircuitStateChanged?.(this.getAiAuthCircuitSnapshot());
+  }
+
+  private getAiAuthCircuitState(): AiAuthCircuitState {
+    return {
+      failureStreak: this.aiAuthFailureStreak,
+      openedUntilMs: this.aiAuthCircuitOpenedUntilMs,
+      openedTotal: this.aiAuthCircuitOpenedTotal,
+    };
+  }
+
+  private applyAiAuthCircuitState(state: AiAuthCircuitState): void {
+    this.aiAuthFailureStreak = state.failureStreak;
+    this.aiAuthCircuitOpenedUntilMs = state.openedUntilMs;
+    this.aiAuthCircuitOpenedTotal = state.openedTotal;
   }
 
   private extractAiEngineStatusCode(error: unknown): number | null {
