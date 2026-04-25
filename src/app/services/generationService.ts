@@ -15,9 +15,12 @@ import {
   mapStoredModelsSafely as mapStoredModelsSafelyShared,
   normalizeManualContent as normalizeManualContentShared,
   normalizeContentToken as normalizeContentTokenShared,
+  parseJson as parseJsonShared,
   parseStoredJsonSafely as parseStoredJsonSafelyShared,
+  pickRange as pickRangeShared,
   registerAiAuthFailureState,
   registerAiAuthSuccessState,
+  resolveRequestedItemCount as resolveRequestedItemCountShared,
   stableStringify as stableStringifyShared,
   type StoredGameRow,
   validateStoredHistoryPayload as validateStoredHistoryPayloadShared,
@@ -911,13 +914,11 @@ export class GenerationService {
   }
 
   private pickRange(min: number, max: number): number {
-    const lower = Math.min(min, max);
-    const upper = Math.max(min, max);
-    return Math.floor(Math.random() * (upper - lower + 1)) + lower;
+    return pickRangeShared(min, max);
   }
 
   private resolveRequestedItemCount(input: { itemCount?: number; numQuestions?: number }): number | undefined {
-    return input.itemCount ?? input.numQuestions;
+    return resolveRequestedItemCountShared(input);
   }
 
   private async generateAndStoreWithResult(
@@ -1120,11 +1121,7 @@ export class GenerationService {
   }
 
   private parseJson(value: string): unknown {
-    try {
-      return JSON.parse(value);
-    } catch {
-      return value;
-    }
+    return parseJsonShared(value);
   }
 
   private normalizeManualContent(content: Record<string, unknown>): Record<string, unknown> {
