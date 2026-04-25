@@ -356,7 +356,10 @@ export class GenerationService {
     const difficulty = Math.max(0, Math.min(100, Math.trunc(input.difficultyPercentage)));
 
     const normalizedContent = this.normalizeManualContent(input.content);
-    const query = `${category.name} manual curation ${language} difficulty ${difficulty}`;
+    const query = this.buildPrimaryWordpassText(
+      normalizedContent,
+      `${category.name} ${language} difficulty ${difficulty}`,
+    );
     const uniquenessKey = this.buildUniquenessKey("word-pass", normalizedContent, language);
 
     const existing = await prisma.gameGeneration.findFirst({
@@ -428,7 +431,10 @@ export class GenerationService {
     const normalizedContent = input.content
       ? this.normalizeManualContent(input.content)
       : this.normalizeManualContent(currentResponse);
-    const query = `${category.name} manual curation ${language} difficulty ${nextDifficulty}`;
+    const query = this.buildPrimaryWordpassText(
+      normalizedContent,
+      `${category.name} ${language} difficulty ${nextDifficulty}`,
+    );
     const uniquenessKey = this.buildUniquenessKey("word-pass", normalizedContent, language);
 
     const duplicate = await prisma.gameGeneration.findFirst({
@@ -1006,12 +1012,16 @@ export class GenerationService {
 
     const requestPayloadForStorage = this.buildStoredRequestPayload(requestPayload, category, language);
     const storedDifficulty = this.extractDifficultyFromRequest(requestPayloadForStorage);
+    const query = this.buildPrimaryWordpassText(
+      sanitizedResponsePayload,
+      input.query,
+    );
 
     try {
       await prisma.gameGeneration.create({
         data: {
           gameType: "word-pass",
-          query: input.query,
+          query,
           language,
           status: "created",
           categoryId: metadata?.category?.id ?? category.id,
@@ -1192,6 +1202,41 @@ export class GenerationService {
       category_name: category.name,
       language,
     };
+  }
+
+  private buildPrimaryWordpassText(payload: unknown, fallback: string): string {
+    const hints = this.extractStringArrayFromObjects(payload, "words", "hint")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+
+    const preferredHint = hints.find((item) => !this.isGenericWordpassHint(item))
+      ?? hints[0];
+
+    if (preferredHint) {
+      return preferredHint.slice(0, 240);
+    }
+
+    const answers = this.extractStringArrayFromObjects(payload, "words", "answer")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+    if (answers.length > 0) {
+      return `Definicion de ${answers[0]}`.slice(0, 240);
+    }
+
+    const normalizedFallback = fallback.trim();
+    return normalizedFallback.length > 0 ? normalizedFallback.slice(0, 240) : "word-pass";
+  }
+
+  private isGenericWordpassHint(hint: string): boolean {
+    const normalized = hint
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+
+    return normalized.includes("palabra real frecuente")
+      || normalized.includes("frequencywords")
+      || normalized.includes("word frequency")
+      || normalized.includes("termino frecuente");
   }
 
   private sanitizeGeneratedPayload(payload: unknown): unknown {
