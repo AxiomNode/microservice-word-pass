@@ -10,8 +10,6 @@ import {
   IngestResponse
 } from "./aiEngineClient.js";
 import {
-  SUPPORTED_LANGUAGES,
-  SUPPORTED_LANGUAGE_BY_CODE,
   GAME_CATEGORIES,
   GAME_CATEGORY_BY_ID,
   GameCategory
@@ -19,11 +17,10 @@ import {
 
 /** @module generationService - Core service for AI-driven word-pass model generation, storage, and retrieval. */
 
-/** Snapshot of the currently loaded category/language catalogs. */
+/** Snapshot of the currently loaded category catalog (English-only stack). */
 export interface CatalogSnapshot {
   source: "local-fallback" | "ai-engine";
   categories: { id: string; name: string }[];
-  languages: { code: string; name: string }[];
   updatedAt: string;
 }
 
@@ -52,7 +49,6 @@ export interface GenerationServiceObserver {
 /** Input parameters for a single AI generation request. */
 export interface GenerateInput {
   categoryId: string;
-  language: string;
   difficultyPercentage?: number;
   itemCount?: number;
   numQuestions?: number;
@@ -63,7 +59,6 @@ export interface GenerateInput {
 /** Input parameters for manually creating a game model from the backoffice. */
 export interface ManualModelInput {
   categoryId: string;
-  language: string;
   difficultyPercentage: number;
   content: Record<string, unknown>;
   status?: "manual" | "validated" | "pending_review";
@@ -71,7 +66,6 @@ export interface ManualModelInput {
 
 export interface ManualModelUpdateInput {
   categoryId?: string;
-  language?: string;
   difficultyPercentage?: number;
   content?: Record<string, unknown>;
   status?: "manual" | "validated" | "pending_review";
@@ -115,7 +109,6 @@ interface ResolvedGenerateInput extends GenerateInput {
 export interface RandomModelsFilters {
   count: number;
   categoryId?: string;
-  language?: string;
   difficultyPercentage?: number;
   status?: string;
   createdAfter?: Date;
@@ -125,7 +118,6 @@ export interface RandomModelsFilters {
 /** Filters for querying model generation history. */
 export interface HistoryFilters {
   categoryId?: string;
-  language?: string;
   difficultyPercentage?: number;
   status?: string;
 }
@@ -137,11 +129,10 @@ export interface HistoryPageResult {
   pageSize: number;
 }
 
-/** Aggregated model counts grouped by category, language, and their matrix. */
+/** Aggregated model counts grouped by category. */
 export interface GroupedModelsSummary {
   categories: Array<{ categoryId: string; categoryName: string; total: number }>;
-  languages: Array<{ language: string; total: number }>;
-  matrix: Array<{ categoryId: string; categoryName: string; language: string; total: number }>;
+  matrix: Array<{ categoryId: string; categoryName: string; total: number }>;
 }
 
 /** Summary result of a periodic batch generation run. */
@@ -174,7 +165,6 @@ interface StoredGameModel {
   id: string;
   gameType: string;
   query: string;
-  language: string;
   status: string;
   categoryId: string | null;
   categoryName: string | null;
@@ -202,33 +192,33 @@ interface GenerationProcessTask {
 }
 
 const PROMPT_VARIANTS = [
-  "fundamentos",
-  "curiosidades",
-  "personajes clave",
-  "eventos historicos",
-  "conceptos esenciales",
-  "hechos poco conocidos",
-  "hitos recientes",
-  "contexto global",
-  "impacto cultural",
-  "innovaciones",
-  "aplicaciones practicas",
-  "retos actuales",
-  "clasicos",
-  "perspectiva internacional",
-  "datos sorprendentes",
-  "figuras influyentes"
+  "fundamentals",
+  "curiosities",
+  "key figures",
+  "historical events",
+  "essential concepts",
+  "little known facts",
+  "recent milestones",
+  "global context",
+  "cultural impact",
+  "innovations",
+  "practical applications",
+  "current challenges",
+  "classics",
+  "international perspective",
+  "surprising data",
+  "influential figures"
 ];
 
 const CONTEXT_FRAMES = [
-  "introduccion",
-  "nivel intermedio",
-  "nivel avanzado",
-  "comparativa historica",
-  "enfoque moderno",
-  "casos emblematicos",
-  "enfoque educativo",
-  "vision interdisciplinar"
+  "introduction",
+  "intermediate level",
+  "advanced level",
+  "historical comparison",
+  "modern approach",
+  "emblematic cases",
+  "educational focus",
+  "interdisciplinary view"
 ];
 
 const LETTER_SETS = [
@@ -248,9 +238,7 @@ export class GenerationService {
   private aiAuthCircuitOpenedUntilMs = 0;
   private aiAuthCircuitOpenedTotal = 0;
   private categories: { id: string; name: string }[] = [...GAME_CATEGORIES];
-  private languages: { code: string; name: string }[] = [...SUPPORTED_LANGUAGES];
   private categoryById = new Map(GAME_CATEGORY_BY_ID);
-  private languageByCode = new Map(SUPPORTED_LANGUAGE_BY_CODE);
   private catalogSource: CatalogSnapshot["source"] = "local-fallback";
   private catalogUpdatedAt = new Date().toISOString();
   private groupedSummaryCache: { data: GroupedModelsSummary; expiresAt: number } | null = null;
@@ -267,18 +255,13 @@ export class GenerationService {
     });
   }
 
-  /** Fetches category/language catalogs from ai-engine, falling back to local defaults on failure. */
   async refreshCatalogs(): Promise<CatalogSnapshot> {
     try {
       this.ensureAiAuthCircuitClosed();
       const payload = await this.client.getCatalogs();
       this.registerAiAuthSuccess();
       this.categories = payload.categories;
-      this.languages = payload.languages;
       this.categoryById = new Map(payload.categories.map((item) => [item.id, item] as const));
-      this.languageByCode = new Map(
-        payload.languages.map((item) => [item.code.toLowerCase(), item] as const)
-      );
       this.catalogSource = "ai-engine";
       this.catalogUpdatedAt = new Date().toISOString();
     } catch (error) {
@@ -289,7 +272,6 @@ export class GenerationService {
     return this.getCatalogSnapshot();
   }
 
-  /** Performs a lightweight connectivity check against ai-engine to verify auth credentials. */
   async runAiAuthSmokeCheck(): Promise<{ ok: true } | { ok: false; reason: string }> {
     try {
       this.ensureAiAuthCircuitClosed();
@@ -305,12 +287,10 @@ export class GenerationService {
     }
   }
 
-  /** Throws if the AI auth circuit breaker is currently open. */
   assertAiGenerationAvailable(): void {
     this.ensureAiAuthCircuitClosed();
   }
 
-  /** Returns the current state of the AI auth circuit breaker. */
   getAiAuthCircuitSnapshot(): AiAuthCircuitSnapshot {
     const open = this.aiAuthCircuitOpenedUntilMs > Date.now();
     return {
@@ -323,23 +303,19 @@ export class GenerationService {
     };
   }
 
-  /** Returns the current catalog snapshot (categories, languages, source). */
   getCatalogSnapshot(): CatalogSnapshot {
     return {
       source: this.catalogSource,
       categories: this.categories,
-      languages: this.languages,
       updatedAt: this.catalogUpdatedAt
     };
   }
 
-  /** Generates a single word-pass model via AI and stores it in the database. */
   async generateAndStore(input: GenerateInput): Promise<unknown> {
     const category = this.getCategoryOrThrow(input.categoryId);
-    const language = this.getLanguageOrThrow(input.language);
     const itemCount = this.resolveRequestedItemCount(input);
 
-    const resolved = this.buildResolvedInput(Math.floor(Math.random() * 10_000), category, language);
+    const resolved = this.buildResolvedInput(Math.floor(Math.random() * 10_000), category);
     const result = await this.generateAndStoreWithResult({
       ...resolved,
       difficultyPercentage: input.difficultyPercentage,
@@ -349,18 +325,16 @@ export class GenerationService {
     return result.responsePayload;
   }
 
-  /** Stores a manually created model entry from the backoffice. */
   async storeManualModel(input: ManualModelInput): Promise<StoredGameModel> {
     const category = this.getCategoryOrThrow(input.categoryId);
-    const language = this.getLanguageOrThrow(input.language);
     const difficulty = Math.max(0, Math.min(100, Math.trunc(input.difficultyPercentage)));
 
     const normalizedContent = this.normalizeManualContent(input.content);
     const query = this.buildPrimaryWordpassText(
       normalizedContent,
-      `${category.name} ${language} difficulty ${difficulty}`,
+      `${category.name} difficulty ${difficulty}`,
     );
-    const uniquenessKey = this.buildUniquenessKey("word-pass", normalizedContent, language);
+    const uniquenessKey = this.buildUniquenessKey("word-pass", normalizedContent);
 
     const existing = await prisma.gameGeneration.findFirst({
       where: { uniquenessKey },
@@ -375,7 +349,6 @@ export class GenerationService {
       data: {
         gameType: "word-pass",
         query,
-        language,
         status: input.status ?? "manual",
         categoryId: category.id,
         categoryName: category.name,
@@ -384,7 +357,6 @@ export class GenerationService {
         requestJson: JSON.stringify({
           source: "backoffice-manual",
           categoryId: category.id,
-          language,
           difficulty_percentage: difficulty,
         }),
         responseJson: JSON.stringify(normalizedContent),
@@ -394,7 +366,6 @@ export class GenerationService {
     return this.mapStoredModel(created);
   }
 
-  /** Deletes a single history item by its ID. */
   async deleteHistoryItem(id: string): Promise<boolean> {
     const deleted = await prisma.gameGeneration.deleteMany({
       where: {
@@ -416,7 +387,6 @@ export class GenerationService {
     }
 
     const nextCategoryId = input.categoryId ?? existing.categoryId ?? undefined;
-    const nextLanguage = input.language ?? existing.language;
     const nextDifficulty = typeof input.difficultyPercentage === "number"
       ? Math.max(0, Math.min(100, Math.trunc(input.difficultyPercentage)))
       : existing.difficultyPercentage ?? this.extractDifficultyFromRequest(this.parseJson(existing.requestJson));
@@ -426,16 +396,15 @@ export class GenerationService {
     }
 
     const category = this.getCategoryOrThrow(nextCategoryId);
-    const language = this.getLanguageOrThrow(nextLanguage);
     const currentResponse = this.parseJson(existing.responseJson) as Record<string, unknown>;
     const normalizedContent = input.content
       ? this.normalizeManualContent(input.content)
       : this.normalizeManualContent(currentResponse);
     const query = this.buildPrimaryWordpassText(
       normalizedContent,
-      `${category.name} ${language} difficulty ${nextDifficulty}`,
+      `${category.name} difficulty ${nextDifficulty}`,
     );
-    const uniquenessKey = this.buildUniquenessKey("word-pass", normalizedContent, language);
+    const uniquenessKey = this.buildUniquenessKey("word-pass", normalizedContent);
 
     const duplicate = await prisma.gameGeneration.findFirst({
       where: {
@@ -453,7 +422,6 @@ export class GenerationService {
       where: { id },
       data: {
         query,
-        language,
         status: input.status ?? existing.status,
         categoryId: category.id,
         categoryName: category.name,
@@ -462,7 +430,6 @@ export class GenerationService {
         requestJson: JSON.stringify({
           source: "backoffice-manual",
           categoryId: category.id,
-          language,
           difficulty_percentage: nextDifficulty,
         }),
         responseJson: JSON.stringify(normalizedContent),
@@ -473,7 +440,6 @@ export class GenerationService {
     return this.mapStoredModel(updated);
   }
 
-  /** Starts an asynchronous multi-item generation process (fire-and-forget). */
   startGenerationProcess(input: GenerationProcessInput): GenerationProcessSnapshot {
     const task: GenerationProcessTask = {
       taskId: randomUUID(),
@@ -499,7 +465,6 @@ export class GenerationService {
     return this.toGenerationProcessSnapshot(task);
   }
 
-  /** Runs a multi-item generation process and waits for it to complete before returning. */
   async runGenerationProcessBlocking(input: GenerationProcessInput): Promise<GenerationProcessSnapshot> {
     const task: GenerationProcessTask = {
       taskId: randomUUID(),
@@ -528,7 +493,6 @@ export class GenerationService {
     return this.toGenerationProcessSnapshot(latest, true);
   }
 
-  /** Returns the snapshot of a generation process by task ID, or null if not found. */
   getGenerationProcess(taskId: string, includeItems = false): GenerationProcessSnapshot | null {
     const task = this.generationProcesses.get(taskId);
     if (!task) {
@@ -537,7 +501,6 @@ export class GenerationService {
     return this.toGenerationProcessSnapshot(task, includeItems);
   }
 
-  /** Lists generation processes, optionally filtered by status and requester. */
   listGenerationProcesses(options?: {
     limit?: number;
     status?: "running" | "completed" | "failed";
@@ -559,7 +522,6 @@ export class GenerationService {
         .map((task) => this.toGenerationProcessSnapshot(task, false));
   }
 
-  /** Runs a full batch generation cycle using concurrent workers across the category/language matrix. */
   async generateBatchModels(options?: BatchGenerationOptions): Promise<BatchGenerationResult> {
     const targetCount = options?.targetCount ?? this.config.BATCH_GENERATION_TARGET_COUNT;
     const maxAttempts = options?.maxAttempts ?? this.config.BATCH_GENERATION_MAX_ATTEMPTS;
@@ -580,11 +542,7 @@ export class GenerationService {
           attempts += 1;
 
           const selection = dimensions[(matrixOffset + attemptNumber) % dimensions.length];
-          const candidateInput = this.buildResolvedInput(
-            attemptNumber,
-            selection.category,
-            selection.language
-          );
+          const candidateInput = this.buildResolvedInput(attemptNumber, selection.category);
 
           try {
             const result = await this.generateAndStoreWithResult(candidateInput, {
@@ -622,7 +580,6 @@ export class GenerationService {
     return result;
   }
 
-  /** Forwards documents to ai-engine for RAG ingestion. */
   async ingestToRag(documents: IngestDocumentInput[], source?: string): Promise<IngestResponse> {
     const ingestSource = source ?? this.config.AI_ENGINE_INGEST_SOURCE ?? this.config.SERVICE_NAME;
     return this.client.ingest(documents, ingestSource);
@@ -632,7 +589,6 @@ export class GenerationService {
     id: true,
     gameType: true,
     query: true,
-    language: true,
     status: true,
     categoryId: true,
     categoryName: true,
@@ -642,16 +598,12 @@ export class GenerationService {
     createdAt: true,
   } as const;
 
-  /** Retrieves random stored models matching the given filters. */
   async randomModels(filters: RandomModelsFilters): Promise<StoredGameModel[]> {
     const where: Prisma.GameGenerationWhereInput = {
       gameType: "word-pass",
       ...(filters.status ? {} : { status: { not: "pending_review" } }),
     };
 
-    if (filters.language) {
-      where.language = this.getLanguageOrThrow(filters.language);
-    }
     if (filters.categoryId) {
       where.categoryId = this.getCategoryOrThrow(filters.categoryId).id;
     }
@@ -693,14 +645,13 @@ export class GenerationService {
     return this.mapStoredModelsSafely(selected).slice(0, filters.count);
   }
 
-  /** Returns model counts aggregated by category, language, and their cross-product matrix. */
   async groupedModelsSummary(): Promise<GroupedModelsSummary> {
     if (this.groupedSummaryCache && Date.now() < this.groupedSummaryCache.expiresAt) {
       return this.groupedSummaryCache.data;
     }
 
     const rows = await prisma.gameGeneration.groupBy({
-      by: ["categoryId", "categoryName", "language"],
+      by: ["categoryId", "categoryName"],
       where: { gameType: "word-pass" },
       _count: { _all: true }
     });
@@ -710,7 +661,6 @@ export class GenerationService {
       .map((row) => ({
         categoryId: row.categoryId as string,
         categoryName: row.categoryName as string,
-        language: row.language,
         total: row._count._all
       }));
 
@@ -725,16 +675,8 @@ export class GenerationService {
       };
     });
 
-    const languages = this.languages.map((item) => item.code).map((language) => {
-      const total = matrix
-        .filter((row) => row.language === language)
-        .reduce((sum, row) => sum + row.total, 0);
-      return { language, total };
-    });
-
     const result: GroupedModelsSummary = {
       categories,
-      languages,
       matrix
     };
 
@@ -746,14 +688,12 @@ export class GenerationService {
     return result;
   }
 
-  /** Returns the most recent stored models, optionally filtered by category, language, or difficulty. */
   async history(limit = 20, filters?: HistoryFilters): Promise<StoredGameModel[]> {
     const normalizedLimit = Math.max(1, Math.min(1000, Math.trunc(limit)));
     const rows = await prisma.gameGeneration.findMany({
       where: {
         gameType: "word-pass",
         ...(filters?.categoryId ? { categoryId: this.getCategoryOrThrow(filters.categoryId).id } : {}),
-        ...(filters?.language ? { language: this.getLanguageOrThrow(filters.language) } : {}),
         ...(typeof filters?.difficultyPercentage === "number"
           ? { difficultyPercentage: Math.max(0, Math.min(100, Math.trunc(filters.difficultyPercentage))) }
           : {}),
@@ -774,7 +714,6 @@ export class GenerationService {
     const where = {
       gameType: "word-pass",
       ...(options?.categoryId ? { categoryId: this.getCategoryOrThrow(options.categoryId).id } : {}),
-      ...(options?.language ? { language: this.getLanguageOrThrow(options.language) } : {}),
       ...(options?.status ? { status: options.status } : {}),
       ...(typeof options?.difficultyPercentage === "number"
         ? { difficultyPercentage: Math.max(0, Math.min(100, Math.trunc(options.difficultyPercentage))) }
@@ -808,11 +747,10 @@ export class GenerationService {
 
     try {
       const category = this.getCategoryOrThrow(input.categoryId);
-      const language = this.getLanguageOrThrow(input.language);
       const concurrency = Math.min(3, input.count);
 
       const processOne = async (index: number): Promise<void> => {
-        const resolved = this.buildResolvedInput(index, category, language);
+        const resolved = this.buildResolvedInput(index, category);
         const itemCount = this.resolveRequestedItemCount(input) ?? resolved.numQuestions;
         const payload: ResolvedGenerateInput = {
           ...resolved,
@@ -921,8 +859,7 @@ export class GenerationService {
 
   private buildResolvedInput(
     attempt: number,
-    category: { id: string; name: string },
-    language: string
+    category: { id: string; name: string }
   ): ResolvedGenerateInput {
     const categoryCount = this.categories.length;
     const variant = PROMPT_VARIANTS[Math.floor(attempt / categoryCount) % PROMPT_VARIANTS.length];
@@ -943,11 +880,10 @@ export class GenerationService {
 
     return {
       categoryId: category.id,
-      language,
       difficultyPercentage: difficulty,
       numQuestions,
       letters,
-      query: `${category.name} ${variant} ${frame} word-pass ${language} evitar respuestas ambiguas o sin sentido`
+      query: `${category.name} ${variant} ${frame} word-pass avoid ambiguous or nonsensical answers`
     };
   }
 
@@ -965,14 +901,12 @@ export class GenerationService {
     input: ResolvedGenerateInput,
     metadata?: GenerateStoreMetadata
   ): Promise<GenerateAndStoreResult> {
-    const language = this.getLanguageOrThrow(input.language);
     const category = this.getCategoryOrThrow(input.categoryId);
 
     const requestPayload: Record<string, string> = {
       query: input.query,
       max_tokens: "1024",
-      use_cache: "true",
-      language
+      use_cache: "true"
     };
 
     if (input.itemCount) {
@@ -980,6 +914,9 @@ export class GenerationService {
     }
     if (typeof input.difficultyPercentage === "number") {
       requestPayload.difficulty_percentage = String(input.difficultyPercentage);
+    }
+    if (input.letters) {
+      requestPayload.letters = input.letters;
     }
 
     this.ensureAiAuthCircuitClosed();
@@ -995,7 +932,7 @@ export class GenerationService {
     }
 
     const sanitizedResponsePayload = this.sanitizeGeneratedPayload(responsePayload);
-    const uniquenessKey = this.buildUniquenessKey("word-pass", sanitizedResponsePayload, language);
+    const uniquenessKey = this.buildUniquenessKey("word-pass", sanitizedResponsePayload);
 
     const existingContent = await prisma.gameGeneration.findFirst({
       where: { uniquenessKey },
@@ -1010,7 +947,7 @@ export class GenerationService {
       };
     }
 
-    const requestPayloadForStorage = this.buildStoredRequestPayload(requestPayload, category, language);
+    const requestPayloadForStorage = this.buildStoredRequestPayload(requestPayload, category);
     const storedDifficulty = this.extractDifficultyFromRequest(requestPayloadForStorage);
     const query = this.buildPrimaryWordpassText(
       sanitizedResponsePayload,
@@ -1022,7 +959,6 @@ export class GenerationService {
         data: {
           gameType: "word-pass",
           query,
-          language,
           status: "created",
           categoryId: metadata?.category?.id ?? category.id,
           categoryName: metadata?.category?.name ?? category.name,
@@ -1054,18 +990,14 @@ export class GenerationService {
     };
   }
 
-  private buildDimensionMatrix(): Array<{ language: string; category: { id: string; name: string } }> {
-    const languageCodes = this.languages.map((item) => item.code);
-    return languageCodes.flatMap((language) =>
-      this.categories.map((category) => ({ language, category }))
-    );
+  private buildDimensionMatrix(): Array<{ category: { id: string; name: string } }> {
+    return this.categories.map((category) => ({ category }));
   }
 
   private mapStoredModel(item: {
     id: string;
     gameType: string;
     query: string;
-    language: string;
     status: string;
     categoryId: string | null;
     categoryName: string | null;
@@ -1077,7 +1009,6 @@ export class GenerationService {
       id: item.id,
       gameType: item.gameType,
       query: item.query,
-      language: item.language,
       status: item.status,
       categoryId: item.categoryId,
       categoryName: item.categoryName,
@@ -1091,7 +1022,6 @@ export class GenerationService {
     id: string;
     gameType: string;
     query: string;
-    language: string;
     status: string;
     categoryId: string | null;
     categoryName: string | null;
@@ -1107,7 +1037,6 @@ export class GenerationService {
       id: item.id,
       gameType: item.gameType,
       query: item.query,
-      language: item.language,
       status: item.status,
       categoryId: item.categoryId,
       categoryName: item.categoryName,
@@ -1123,7 +1052,6 @@ export class GenerationService {
       id: string;
       gameType: string;
       query: string;
-      language: string;
       status: string;
       categoryId: string | null;
       categoryName: string | null;
@@ -1154,7 +1082,6 @@ export class GenerationService {
       id: string;
       gameType: string;
       query: string;
-      language: string;
       status: string;
       categoryId: string | null;
       categoryName: string | null;
@@ -1193,14 +1120,12 @@ export class GenerationService {
 
   private buildStoredRequestPayload(
     requestPayload: Record<string, string>,
-    category: { id: string; name: string },
-    language: string
+    category: { id: string; name: string }
   ): Record<string, string> {
     return {
       ...requestPayload,
       category_id: category.id,
       category_name: category.name,
-      language,
     };
   }
 
@@ -1220,7 +1145,7 @@ export class GenerationService {
       .map((item) => item.trim())
       .filter((item) => item.length > 0);
     if (answers.length > 0) {
-      return `Definicion de ${answers[0]}`.slice(0, 240);
+      return `Definition of ${answers[0]}`.slice(0, 240);
     }
 
     const normalizedFallback = fallback.trim();
@@ -1233,10 +1158,10 @@ export class GenerationService {
       .replace(/[\u0300-\u036f]/g, "")
       .toLowerCase();
 
-    return normalized.includes("palabra real frecuente")
+    return normalized.includes("frequent real word")
       || normalized.includes("frequencywords")
       || normalized.includes("word frequency")
-      || normalized.includes("termino frecuente");
+      || normalized.includes("frequent term");
   }
 
   private sanitizeGeneratedPayload(payload: unknown): unknown {
@@ -1287,13 +1212,13 @@ export class GenerationService {
     return compact;
   }
 
-  private buildUniquenessKey(gameType: string, payload: unknown, language: string): string {
+  private buildUniquenessKey(gameType: string, payload: unknown): string {
     const primarySignature = this.extractPrimaryContentSignature(gameType, payload);
     const stablePayload = primarySignature
       ? `primary:${primarySignature}`
       : this.stableStringify(payload);
     return createHash("sha256")
-      .update(`${gameType}|${language.toLowerCase()}|${stablePayload}`)
+      .update(`${gameType}|${stablePayload}`)
       .digest("hex");
   }
 
@@ -1405,14 +1330,6 @@ export class GenerationService {
       throw new Error(`Unsupported categoryId: ${categoryId}`);
     }
     return category;
-  }
-
-  private getLanguageOrThrow(language: string): string {
-    const normalized = language.toLowerCase();
-    if (!this.languageByCode.has(normalized)) {
-      throw new Error(`Unsupported language: ${language}`);
-    }
-    return normalized;
   }
 
   private ensureAiAuthCircuitClosed(): void {

@@ -98,7 +98,7 @@ describe("ModelGenerationJob", () => {
       "Periodic model generation scheduler started",
     );
     expect(logger.info).toHaveBeenCalledWith(
-      expect.objectContaining({ trigger: "startup", catalogSource: "seed", categoryCount: 1, languageCount: 1 }),
+      expect.objectContaining({ trigger: "startup", catalogSource: "seed", categoryCount: 1 }),
       "Periodic model generation cycle finished",
     );
 

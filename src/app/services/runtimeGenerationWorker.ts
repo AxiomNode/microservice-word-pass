@@ -290,7 +290,6 @@ export class RuntimeGenerationWorker {
     try {
       const catalogs = await this.ensureCatalogsLoaded();
       const category = pickCategory(catalogs.categories, this.config.selectedCategoryIds);
-      const language = pickLanguage(catalogs.languages);
       const difficultyPercentage = pickDifficultyPercentage(this.config.selectedDifficultyLevels);
 
       if (!category) {
@@ -299,7 +298,6 @@ export class RuntimeGenerationWorker {
 
       const task = await this.generationService.runGenerationProcessBlocking({
         categoryId: category.id,
-        language,
         difficultyPercentage,
         count: this.config.countPerIteration,
         requestedBy: "backoffice",
@@ -323,7 +321,6 @@ export class RuntimeGenerationWorker {
           duplicates: task.duplicates,
           failed: task.failed,
           categoryId: category.id,
-          language,
           difficultyPercentage,
         },
         "Runtime generation iteration finished"
@@ -352,7 +349,7 @@ export class RuntimeGenerationWorker {
 
   private async ensureCatalogsLoaded() {
     const current = this.generationService.getCatalogSnapshot();
-    if (current.categories.length > 0 && current.languages.length > 0) {
+    if (current.categories.length > 0) {
       return current;
     }
     return this.generationService.refreshCatalogs();
@@ -400,15 +397,6 @@ function pickCategory(
   }
 
   return available[Math.floor(Math.random() * available.length)] ?? null;
-}
-
-function pickLanguage(languages: Array<{ code: string; name: string }>): string {
-  if (languages.length === 0) {
-    return "es";
-  }
-
-  const selected = languages[Math.floor(Math.random() * languages.length)];
-  return selected?.code ?? "es";
 }
 
 function pickDifficultyPercentage(selectedLevels: RuntimeDifficultyLevel[]): number {

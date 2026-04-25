@@ -15,11 +15,9 @@ describe("monitoring routes", () => {
       getCatalogSnapshot: vi.fn().mockReturnValue({
         source: "seed",
         categories: [{ id: "1" }, { id: "2" }],
-        languages: [{ code: "es" }, { code: "en" }, { code: "fr" }],
       }),
       groupedModelsSummary: vi.fn().mockResolvedValue({
         categories: [{ total: 2 }, { total: 0 }],
-        languages: [{ total: 1 }, { total: 2 }, { total: 0 }],
         matrix: [{}, {}],
       }),
     };
@@ -34,11 +32,9 @@ describe("monitoring routes", () => {
       coverage: {
         catalogSource: "seed",
         totalCategories: 2,
-        totalLanguages: 3,
         categoriesWithData: 1,
-        languagesWithData: 2,
         matrixSlotsWithData: 2,
-        totalMatrixSlots: 6,
+        categoryCoverageRatioFromMatrix: 1,
       },
     });
 
@@ -82,8 +78,8 @@ describe("monitoring routes", () => {
       toPrometheus: vi.fn(),
     };
     const generationService = {
-      getCatalogSnapshot: vi.fn().mockReturnValue({ source: "empty", categories: [], languages: [] }),
-      groupedModelsSummary: vi.fn().mockResolvedValue({ categories: [], languages: [], matrix: [] }),
+      getCatalogSnapshot: vi.fn().mockReturnValue({ source: "empty", categories: [] }),
+      groupedModelsSummary: vi.fn().mockResolvedValue({ categories: [], matrix: [] }),
     };
 
     await monitoringRoutes(app, metrics as never, generationService as never);
@@ -94,11 +90,8 @@ describe("monitoring routes", () => {
     expect(response.json()).toMatchObject({
       coverage: {
         totalCategories: 0,
-        totalLanguages: 0,
-        totalMatrixSlots: 0,
         categoryCoverageRatio: 0,
-        languageCoverageRatio: 0,
-        matrixCoverageRatio: 0,
+        categoryCoverageRatioFromMatrix: 0,
       },
     });
 

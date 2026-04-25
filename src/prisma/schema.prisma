@@ -13,7 +13,6 @@ model GameGeneration {
   id           String   @id @default(cuid())
   gameType     String
   query        String
-  language     String
   status       String
   /// Optional reference to a game category
   categoryId    String?
@@ -29,7 +28,6 @@ model GameGeneration {
 
   @@index([gameType, createdAt])
   @@index([gameType, difficultyPercentage, createdAt])
-  @@index([gameType, language, categoryId, createdAt])
-  @@index([gameType, language, categoryId, difficultyPercentage, createdAt])
-  @@index([gameType, categoryId, language])
+  @@index([gameType, categoryId, createdAt])
+  @@index([gameType, categoryId, difficultyPercentage, createdAt])
 }

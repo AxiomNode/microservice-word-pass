@@ -87,7 +87,6 @@ describe("games routes", () => {
     expect(generationService.generateAndStore).toHaveBeenCalledWith(
       expect.objectContaining({
         categoryId: "11",
-        language: "es",
         difficultyPercentage: 55,
         itemCount: 5,
       }),
@@ -139,7 +138,6 @@ describe("games routes", () => {
       page: 2,
       pageSize: 30,
       categoryId: undefined,
-      language: "es",
       difficultyPercentage: undefined,
       status: "validated",
     });
@@ -305,7 +303,7 @@ describe("games routes", () => {
       [
         {
           content: "Wordpass content",
-          metadata: { origin: "seed", categoryId: "9", language: "es", difficultyPercentage: 60 },
+          metadata: { origin: "seed", categoryId: "9", difficultyPercentage: 60 },
         },
       ],
       "backoffice",
@@ -327,7 +325,7 @@ describe("games routes", () => {
     generationService.deleteHistoryItem
       .mockResolvedValueOnce(false)
       .mockResolvedValueOnce(true);
-    generationService.groupedModelsSummary.mockResolvedValue({ categories: [{ name: "General", total: 1 }], languages: [{ code: "es", total: 1 }], matrix: [{ categoryId: "9", language: "es", total: 1 }] });
+    generationService.groupedModelsSummary.mockResolvedValue({ categories: [{ name: "General", total: 1 }], matrix: [{ categoryId: "9", total: 1 }] });
     generationService.getCatalogSnapshot.mockReturnValue({ source: "seed", categories: [{ id: "9" }], languages: [{ code: "es" }] });
 
     await gameRoutes(app, generationService as never);

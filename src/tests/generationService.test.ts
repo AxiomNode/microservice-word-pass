@@ -120,7 +120,7 @@ describe("GenerationService", () => {
       },
     ]);
 
-    const result = await service.randomModels({ count: 2, language: "es" });
+    const result = await service.randomModels({ count: 2 });
 
     expect(result).toHaveLength(1);
     expect(result[0]?.id).toBe("valid-word-pass");
@@ -175,7 +175,7 @@ describe("GenerationService", () => {
       },
     ]);
 
-    const result = await service.history(10, { language: "es" });
+    const result = await service.history(10, {});
 
     expect(result).toHaveLength(2);
     expect(result[0]?.id).toBe("invalid-word-pass");
@@ -196,7 +196,7 @@ describe("GenerationService", () => {
 
     prismaMocks.findMany.mockResolvedValue([]);
 
-    await service.randomModels({ count: 2, language: "es" });
+    await service.randomModels({ count: 2 });
 
     expect(prismaMocks.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -286,13 +286,12 @@ describe("GenerationService", () => {
     prismaMocks.count.mockResolvedValue(1);
     prismaMocks.findMany.mockResolvedValue([]);
 
-    await service.historyPage(500, { page: 2, pageSize: 25, difficultyPercentage: 60, language: "es" });
+    await service.historyPage(500, { page: 2, pageSize: 25, difficultyPercentage: 60 });
 
     expect(prismaMocks.count).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           gameType: "word-pass",
-          language: "es",
           difficultyPercentage: 60,
         }),
       }),
@@ -301,7 +300,6 @@ describe("GenerationService", () => {
       expect.objectContaining({
         where: expect.objectContaining({
           gameType: "word-pass",
-          language: "es",
           difficultyPercentage: 60,
         }),
         skip: 25,
@@ -355,7 +353,6 @@ describe("GenerationService", () => {
     expect(refreshed).toMatchObject({
       source: "ai-engine",
       categories: [{ id: "11", name: "Film" }],
-      languages: [{ code: "ES", name: "Spanish" }],
     });
     expect(service.getCatalogSnapshot().source).toBe("ai-engine");
     expect(smoke).toEqual({ ok: false, reason: "ai-engine error 401 unauthorized" });
@@ -416,7 +413,6 @@ describe("GenerationService", () => {
 
     const stored = await service.storeManualModel({
       categoryId: "9",
-      language: "ES",
       difficultyPercentage: 45.8,
       content: { words: [{ letter: "N", hint: "Pista", answer: "Nueva", starts_with: true }] },
       status: "validated",
@@ -425,7 +421,6 @@ describe("GenerationService", () => {
     await expect(
       service.storeManualModel({
         categoryId: "9",
-        language: "es",
         difficultyPercentage: 45,
         content: { words: [{ letter: "N", hint: "Pista", answer: "Nueva", starts_with: true }] },
       }),
@@ -434,11 +429,10 @@ describe("GenerationService", () => {
     await expect(service.deleteHistoryItem("missing")).resolves.toBe(false);
     await expect(service.deleteHistoryItem("manual-1")).resolves.toBe(true);
 
-    expect(stored).toMatchObject({ id: "manual-1", status: "validated", language: "es" });
+    expect(stored).toMatchObject({ id: "manual-1", status: "validated" });
     expect(prismaMocks.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          language: "es",
           status: "validated",
           difficultyPercentage: 45,
         }),
@@ -476,7 +470,6 @@ describe("GenerationService", () => {
     const service = new GenerationService(createConfig());
     (service as any).buildResolvedInput = vi.fn().mockReturnValue({
       categoryId: "9",
-      language: "es",
       difficultyPercentage: 15,
       numQuestions: 7,
       letters: "A,B,C",
@@ -489,7 +482,6 @@ describe("GenerationService", () => {
 
     const result = await service.generateAndStore({
       categoryId: "9",
-      language: "ES",
       difficultyPercentage: 60,
       numQuestions: 4,
     });
@@ -498,7 +490,6 @@ describe("GenerationService", () => {
     expect((service as any).generateAndStoreWithResult).toHaveBeenCalledWith(
       expect.objectContaining({
         categoryId: "9",
-        language: "es",
         difficultyPercentage: 60,
         itemCount: 4,
         query: "resolved query",
@@ -524,8 +515,8 @@ describe("GenerationService", () => {
       observer.onProcessCompleted((service as any).toGenerationProcessSnapshot(task, true));
     });
 
-    const started = service.startGenerationProcess({ categoryId: "9", language: "es", count: 2, requestedBy: "backoffice" });
-    const completed = await service.runGenerationProcessBlocking({ categoryId: "9", language: "es", count: 2 });
+    const started = service.startGenerationProcess({ categoryId: "9", count: 2, requestedBy: "backoffice" });
+    const completed = await service.runGenerationProcessBlocking({ categoryId: "9", count: 2 });
 
     expect(started).toMatchObject({ status: "completed", requestedBy: "backoffice", requested: 2 });
     expect(completed).toMatchObject({ status: "completed", created: 1, duplicates: 1 });
@@ -537,8 +528,8 @@ describe("GenerationService", () => {
   it("aggregates batch generation results including duplicates and ai-auth circuit stops", async () => {
     const observer = { onBatchCompleted: vi.fn() };
     const service = new GenerationService(createConfig({ BATCH_GENERATION_CONCURRENCY: 1 }), observer);
-    (service as any).buildDimensionMatrix = vi.fn().mockReturnValue([{ category: { id: "9", name: "General Knowledge" }, language: "es" }]);
-    (service as any).buildResolvedInput = vi.fn().mockReturnValue({ categoryId: "9", language: "es", query: "resolved" });
+    (service as any).buildDimensionMatrix = vi.fn().mockReturnValue([{ category: { id: "9", name: "General Knowledge" } }]);
+    (service as any).buildResolvedInput = vi.fn().mockReturnValue({ categoryId: "9", query: "resolved" });
     (service as any).generateAndStoreWithResult = vi.fn()
       .mockResolvedValueOnce({ stored: true, responsePayload: {} })
       .mockResolvedValueOnce({ stored: false, duplicateReason: "content", responsePayload: {} })
@@ -558,10 +549,10 @@ describe("GenerationService", () => {
     expect(() => serviceAny.normalizeManualContent({})).toThrow("Invalid content payload");
     expect(serviceAny.buildUniquenessKey("word-pass", {
       words: [{ answer: "Árbol" }],
-    }, "ES")).toBe(
+    })).toBe(
       serviceAny.buildUniquenessKey("word-pass", {
         words: [{ answer: "arbol" }],
-      }, "es"),
+      }),
     );
     expect(serviceAny.extractDifficultyFromRequest({ difficulty_percentage: "120" })).toBe(100);
     expect(serviceAny.extractDifficultyFromRequest({ difficulty_percentage: -5 })).toBe(0);
@@ -570,7 +561,6 @@ describe("GenerationService", () => {
     expect(serviceAny.validateStoredHistoryPayload({ game: { words: [] } }, "item-1", "word-pass")).toContain("Generated word-pass has no words");
     expect(serviceAny.stableStringify({ b: 1, a: [2, 1] })).toBe('{"a":[2,1],"b":1}');
     expect(() => serviceAny.getCategoryOrThrow("unknown")).toThrow("Unsupported categoryId: unknown");
-    expect(() => serviceAny.getLanguageOrThrow("zz")).toThrow("Unsupported language: zz");
     expect(serviceAny.extractAiEngineStatusCode(new Error("ai-engine error 403 forbidden"))).toBe(403);
     expect(serviceAny.extractAiEngineStatusCode("bad")).toBeNull();
     expect(serviceAny.isAiAuthCircuitOpenError(new Error("AI auth circuit open until tomorrow"))).toBe(true);
@@ -596,13 +586,13 @@ describe("GenerationService", () => {
       generatedItems: [],
       errors: [],
     });
-    serviceAny.buildResolvedInput = vi.fn().mockReturnValue({ categoryId: "9", language: "es", query: "resolved", numQuestions: 5 });
+    serviceAny.buildResolvedInput = vi.fn().mockReturnValue({ categoryId: "9", query: "resolved", numQuestions: 5 });
     serviceAny.generateAndStoreWithResult = vi.fn()
       .mockResolvedValueOnce({ stored: true, responsePayload: { id: "a" } })
       .mockResolvedValueOnce({ stored: false, duplicateReason: "content", responsePayload: { id: "b" } })
       .mockRejectedValueOnce(new Error("third failed"));
 
-    await serviceAny.runGenerationProcess("task-run", { categoryId: "9", language: "es", count: 3 });
+    await serviceAny.runGenerationProcess("task-run", { categoryId: "9", count: 3 });
 
     const finalTask = service.getGenerationProcess("task-run", true);
     expect(finalTask).toMatchObject({
@@ -719,19 +709,16 @@ describe("GenerationService", () => {
 
     const success = await serviceAny.generateAndStoreWithResult({
       categoryId: "9",
-      language: "ES",
       query: "query",
       itemCount: 3,
       difficultyPercentage: 55,
     });
     const duplicate = await serviceAny.generateAndStoreWithResult({
       categoryId: "9",
-      language: "es",
       query: "query",
     });
     const racedDuplicate = await serviceAny.generateAndStoreWithResult({
       categoryId: "9",
-      language: "es",
       query: "query-2",
     });
 
@@ -755,10 +742,10 @@ describe("GenerationService", () => {
       .mockRejectedValueOnce(new Error("ai-engine error 500 upstream"));
 
     await expect(
-      serviceAny.generateAndStoreWithResult({ categoryId: "9", language: "es", query: "query" }),
+      serviceAny.generateAndStoreWithResult({ categoryId: "9", query: "query" }),
     ).rejects.toThrow("ai-engine error 401 unauthorized");
     await expect(
-      serviceAny.generateAndStoreWithResult({ categoryId: "9", language: "es", query: "query" }),
+      serviceAny.generateAndStoreWithResult({ categoryId: "9", query: "query" }),
     ).rejects.toThrow("AI auth circuit open until");
 
     expect(service.getAiAuthCircuitSnapshot()).toMatchObject({ open: true, failureStreak: 1, openedTotal: 1 });
@@ -803,11 +790,10 @@ describe("GenerationService", () => {
     await expect(service.updateHistoryItem("entry-2", { status: "validated" })).rejects.toThrow("Duplicate content");
 
     expect(service.listGenerationProcesses({ status: "failed", requestedBy: "backoffice", limit: 0 })).toEqual([]);
-    expect(serviceAny.buildStoredRequestPayload({ query: "x" }, { id: "9", name: "General Knowledge" }, "es")).toEqual({
+    expect(serviceAny.buildStoredRequestPayload({ query: "x" }, { id: "9", name: "General Knowledge" })).toEqual({
       query: "x",
       category_id: "9",
       category_name: "General Knowledge",
-      language: "es",
     });
     expect(serviceAny.extractPrimaryContentSignature("word-pass", { words: [{ answer: "Árbol" }, { answer: "Casa" }] })).toBe("arbol|casa");
     expect(serviceAny.extractStringArrayFromObjects({ words: [{ answer: "Uno" }, { nope: true }] }, "words", "answer")).toEqual(["Uno"]);
@@ -861,7 +847,6 @@ describe("GenerationService", () => {
 
     const stored = await service.storeManualModel({
       categoryId: "9",
-      language: "es",
       difficultyPercentage: 35,
       content: { words: [{ letter: "A", hint: "Pista", answer: "Algo", starts_with: true }] },
     });
@@ -869,13 +854,12 @@ describe("GenerationService", () => {
     await service.randomModels({
       count: 3,
       categoryId: "9",
-      language: "es",
       status: "validated",
       difficultyPercentage: 45,
       createdAfter: new Date("2026-04-01T00:00:00.000Z"),
       createdBefore: new Date("2026-04-30T00:00:00.000Z"),
     });
-    await service.history(10, { categoryId: "9", language: "es", difficultyPercentage: 55 });
+    await service.history(10, { categoryId: "9", difficultyPercentage: 55 });
     await service.historyPage();
     await service.ingestToRag([{ content: "A" }]);
 
@@ -891,7 +875,6 @@ describe("GenerationService", () => {
       expect.objectContaining({
         where: expect.objectContaining({
           categoryId: "9",
-          language: "es",
           status: "validated",
           difficultyPercentage: 45,
           createdAt: expect.objectContaining({
@@ -906,7 +889,6 @@ describe("GenerationService", () => {
       expect.objectContaining({
         where: expect.objectContaining({
           categoryId: "9",
-          language: "es",
           difficultyPercentage: 55,
         }),
       })
@@ -924,7 +906,7 @@ describe("GenerationService", () => {
     const serviceAny = service as any;
 
     serviceAny.runGenerationProcess = vi.fn();
-    const started = service.startGenerationProcess({ categoryId: "9", language: "es", count: 2 });
+    const started = service.startGenerationProcess({ categoryId: "9", count: 2 });
 
     serviceAny.generationProcesses.set("failed-task", {
       taskId: "failed-task",

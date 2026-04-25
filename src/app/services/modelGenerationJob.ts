@@ -75,7 +75,6 @@ export class ModelGenerationJob {
           durationMs: Date.now() - startedAt,
           catalogSource: catalogs.source,
           categoryCount: catalogs.categories.length,
-          languageCount: catalogs.languages.length,
           ...result
         },
         "Periodic model generation cycle finished"

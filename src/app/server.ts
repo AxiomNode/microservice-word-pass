@@ -130,8 +130,7 @@ async function main() {
   const catalogs = await generationService.refreshCatalogs();
   metrics.recordLog("info", "catalogs_initialized", {
     source: catalogs.source,
-    categories: catalogs.categories.length,
-    languages: catalogs.languages.length
+    categories: catalogs.categories.length
   });
 
   await app.listen({ host: "0.0.0.0", port: config.SERVICE_PORT });
