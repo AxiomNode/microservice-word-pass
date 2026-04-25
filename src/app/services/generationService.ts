@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { buildStoredRequestPayload } from "@axiomnode/shared-sdk-client";
 import { createHash, randomUUID } from "node:crypto";
 
 import { AppConfig } from "../config.js";
@@ -947,7 +948,7 @@ export class GenerationService {
       };
     }
 
-    const requestPayloadForStorage = this.buildStoredRequestPayload(requestPayload, category);
+    const requestPayloadForStorage = buildStoredRequestPayload(requestPayload, category);
     const storedDifficulty = this.extractDifficultyFromRequest(requestPayloadForStorage);
     const query = this.buildPrimaryWordpassText(
       sanitizedResponsePayload,
@@ -1116,17 +1117,6 @@ export class GenerationService {
       console.warn(`Stored ${gameLabel} history item is invalid but still exposed for backoffice`, itemId, message);
       return message;
     }
-  }
-
-  private buildStoredRequestPayload(
-    requestPayload: Record<string, string>,
-    category: { id: string; name: string }
-  ): Record<string, string> {
-    return {
-      ...requestPayload,
-      category_id: category.id,
-      category_name: category.name,
-    };
   }
 
   private buildPrimaryWordpassText(payload: unknown, fallback: string): string {

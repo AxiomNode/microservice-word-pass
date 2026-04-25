@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { buildStoredRequestPayload } from "@axiomnode/shared-sdk-client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Prisma } from "@prisma/client";
 
@@ -790,7 +791,7 @@ describe("GenerationService", () => {
     await expect(service.updateHistoryItem("entry-2", { status: "validated" })).rejects.toThrow("Duplicate content");
 
     expect(service.listGenerationProcesses({ status: "failed", requestedBy: "backoffice", limit: 0 })).toEqual([]);
-    expect(serviceAny.buildStoredRequestPayload({ query: "x" }, { id: "9", name: "General Knowledge" })).toEqual({
+    expect(buildStoredRequestPayload({ query: "x" }, { id: "9", name: "General Knowledge" })).toEqual({
       query: "x",
       category_id: "9",
       category_name: "General Knowledge",
