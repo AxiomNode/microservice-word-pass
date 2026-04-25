@@ -811,6 +811,13 @@ describe("GenerationService", () => {
     });
     expect(serviceAny.extractPrimaryContentSignature("word-pass", { words: [{ answer: "Árbol" }, { answer: "Casa" }] })).toBe("arbol|casa");
     expect(serviceAny.extractStringArrayFromObjects({ words: [{ answer: "Uno" }, { nope: true }] }, "words", "answer")).toEqual(["Uno"]);
+    expect(serviceAny.extractStringArrayFromObjects({ game: { words: [{ answer: "Dos" }] } }, "words", "answer")).toEqual(["Dos"]);
+    expect(
+      serviceAny.buildPrimaryWordpassText(
+        { game: { words: [{ hint: "Definicion de casa: termino comun.", answer: "casa" }] } },
+        "fallback",
+      ),
+    ).toBe("Definicion de casa: termino comun.");
     expect(serviceAny.parseJson("not-json")).toBe("not-json");
     expect(serviceAny.resolveRequestedItemCount({ itemCount: 3, numQuestions: 7 })).toBe(3);
     expect(serviceAny.resolveRequestedItemCount({ numQuestions: 7 })).toBe(7);

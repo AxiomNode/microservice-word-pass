@@ -1330,7 +1330,13 @@ export class GenerationService {
     }
 
     const asRecord = payload as Record<string, unknown>;
-    const candidate = asRecord[arrayKey];
+    let candidate = asRecord[arrayKey];
+    if (!Array.isArray(candidate)) {
+      const nestedGame = asRecord.game;
+      if (nestedGame && typeof nestedGame === "object") {
+        candidate = (nestedGame as Record<string, unknown>)[arrayKey];
+      }
+    }
     if (!Array.isArray(candidate)) {
       return [];
     }
