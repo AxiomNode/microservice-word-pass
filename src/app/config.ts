@@ -40,7 +40,7 @@ const ConfigSchema = z.object({
   PRIVATE_DOCS_PREFIX: z.string().default("/private/docs"),
   PRIVATE_DOCS_TOKEN: OptionalEnvString,
   METRICS_LOG_BUFFER_SIZE: z.coerce.number().int().min(50).max(5000).default(500),
-  BATCH_GENERATION_ENABLED: z.coerce.boolean().default(false),
+  BATCH_GENERATION_ENABLED: EnvBoolean.default(false),
   BATCH_GENERATION_INTERVAL_MINUTES: z.coerce.number().int().min(1).max(240).default(20),
   BATCH_GENERATION_TARGET_COUNT: z.coerce.number().int().min(1).max(5000).default(1000),
   BATCH_GENERATION_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(20000).default(4000),
