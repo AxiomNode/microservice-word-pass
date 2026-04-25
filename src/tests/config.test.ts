@@ -27,7 +27,7 @@ describe("loadConfig", () => {
     expect(config.PRIVATE_DOCS_ENABLED).toBe(false);
     expect(config.PRIVATE_DOCS_TOKEN).toBeUndefined();
     expect(config.AI_ENGINE_INGEST_SOURCE).toBe("   ");
-    expect(config.BATCH_GENERATION_ENABLED).toBe(true);
+    expect(config.BATCH_GENERATION_ENABLED).toBe(false);
   });
 
   it("accepts private docs when an explicit token is configured", () => {
