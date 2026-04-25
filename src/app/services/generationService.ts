@@ -2,7 +2,9 @@ import { Prisma } from "@prisma/client";
 import {
   buildCategoryDimensionMatrix,
   buildStoredRequestPayload,
+  extractAiEngineStatusCode as extractAiEngineStatusCodeShared,
   extractDifficultyFromRequest as extractDifficultyFromRequestShared,
+  isAiAuthCircuitOpenError as isAiAuthCircuitOpenErrorShared,
   mapStoredHistoryModel as mapStoredHistoryModelShared,
   mapStoredHistoryModels as mapStoredHistoryModelsShared,
   mapStoredModel as mapStoredModelShared,
@@ -1281,20 +1283,10 @@ export class GenerationService {
   }
 
   private extractAiEngineStatusCode(error: unknown): number | null {
-    if (!(error instanceof Error)) {
-      return null;
-    }
-
-    const match = error.message.match(/ai-engine error\s+(\d{3})/i);
-    if (!match) {
-      return null;
-    }
-
-    const statusCode = Number(match[1]);
-    return Number.isFinite(statusCode) ? statusCode : null;
+    return extractAiEngineStatusCodeShared(error);
   }
 
   private isAiAuthCircuitOpenError(error: unknown): boolean {
-    return error instanceof Error && /ai auth circuit open/i.test(error.message);
+    return isAiAuthCircuitOpenErrorShared(error);
   }
 }
