@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import { buildStoredRequestPayload } from "@axiomnode/shared-sdk-client";
+import { buildCategoryDimensionMatrix, buildStoredRequestPayload } from "@axiomnode/shared-sdk-client";
 import { createHash, randomUUID } from "node:crypto";
 
 import { AppConfig } from "../config.js";
@@ -992,7 +992,7 @@ export class GenerationService {
   }
 
   private buildDimensionMatrix(): Array<{ category: { id: string; name: string } }> {
-    return this.categories.map((category) => ({ category }));
+    return buildCategoryDimensionMatrix(this.categories);
   }
 
   private mapStoredModel(item: {
