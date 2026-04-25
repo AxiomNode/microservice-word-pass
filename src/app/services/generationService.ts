@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import {
   buildCategoryDimensionMatrix,
   buildStoredRequestPayload,
+  extractDifficultyFromRequest as extractDifficultyFromRequestShared,
   mapStoredHistoryModel as mapStoredHistoryModelShared,
   mapStoredHistoryModels as mapStoredHistoryModelsShared,
   mapStoredModel as mapStoredModelShared,
@@ -1206,22 +1207,7 @@ export class GenerationService {
   }
 
   private extractDifficultyFromRequest(requestPayload: unknown): number | undefined {
-    if (!requestPayload || typeof requestPayload !== "object") {
-      return undefined;
-    }
-
-    const raw = (requestPayload as Record<string, unknown>).difficulty_percentage;
-    if (typeof raw === "number" && Number.isFinite(raw)) {
-      return Math.max(0, Math.min(100, Math.trunc(raw)));
-    }
-    if (typeof raw === "string") {
-      const parsed = Number(raw);
-      if (Number.isFinite(parsed)) {
-        return Math.max(0, Math.min(100, Math.trunc(parsed)));
-      }
-    }
-
-    return undefined;
+    return extractDifficultyFromRequestShared(requestPayload);
   }
 
   private stableStringify(value: unknown): string {
