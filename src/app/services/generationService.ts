@@ -3,6 +3,7 @@ import {
   type AiAuthCircuitState,
   buildCategoryDimensionMatrix,
   buildStoredRequestPayload,
+  ensureAiAuthCircuitClosedState,
   extractAiEngineStatusCode as extractAiEngineStatusCodeShared,
   extractDifficultyFromRequest as extractDifficultyFromRequestShared,
   isAiAuthCircuitOpenError as isAiAuthCircuitOpenErrorShared,
@@ -1242,19 +1243,19 @@ export class GenerationService {
   }
 
   private ensureAiAuthCircuitClosed(): void {
-    if (this.aiAuthCircuitOpenedUntilMs <= 0) {
-      return;
-    }
-
-    if (Date.now() >= this.aiAuthCircuitOpenedUntilMs) {
-      this.aiAuthCircuitOpenedUntilMs = 0;
-      this.aiAuthFailureStreak = 0;
+    const check = ensureAiAuthCircuitClosedState(this.getAiAuthCircuitState(), Date.now());
+    this.applyAiAuthCircuitState(check.state);
+    if (check.shouldEmit) {
       this.emitAiAuthCircuitState();
       return;
     }
 
+    if (check.blockedUntilMs === null) {
+      return;
+    }
+
     throw new Error(
-      `AI auth circuit open until ${new Date(this.aiAuthCircuitOpenedUntilMs).toISOString()}`
+      `AI auth circuit open until ${new Date(check.blockedUntilMs).toISOString()}`
     );
   }
 
