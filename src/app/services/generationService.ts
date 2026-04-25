@@ -1,5 +1,10 @@
 import { Prisma } from "@prisma/client";
-import { buildCategoryDimensionMatrix, buildStoredRequestPayload } from "@axiomnode/shared-sdk-client";
+import {
+  buildCategoryDimensionMatrix,
+  buildStoredRequestPayload,
+  parseStoredJsonSafely as parseStoredJsonSafelyShared,
+  validateStoredHistoryPayload as validateStoredHistoryPayloadShared,
+} from "@axiomnode/shared-sdk-client";
 import { createHash, randomUUID } from "node:crypto";
 
 import { AppConfig } from "../config.js";
@@ -1095,28 +1100,16 @@ export class GenerationService {
   }
 
   private parseStoredJsonSafely(value: string): { value: unknown } {
-    try {
-      return { value: this.parseJson(value) };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      return {
-        value: {
-          raw: value,
-          parseError: message,
-        },
-      };
-    }
+    return parseStoredJsonSafelyShared((input) => this.parseJson(input), value);
   }
 
   private validateStoredHistoryPayload(payload: unknown, itemId: string, gameLabel: string): string | undefined {
-    try {
-      this.sanitizeGeneratedPayload(payload);
-      return undefined;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      console.warn(`Stored ${gameLabel} history item is invalid but still exposed for backoffice`, itemId, message);
-      return message;
-    }
+    return validateStoredHistoryPayloadShared(
+      payload,
+      itemId,
+      gameLabel,
+      (input) => this.sanitizeGeneratedPayload(input),
+    );
   }
 
   private buildPrimaryWordpassText(payload: unknown, fallback: string): string {
