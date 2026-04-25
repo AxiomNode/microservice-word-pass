@@ -87,11 +87,10 @@ describe("GenerationService", () => {
         id: "invalid-word-pass",
         gameType: "word-pass",
         query: "invalid rosco",
-        language: "es",
         status: "created",
         categoryId: "9",
         categoryName: "General Knowledge",
-        requestJson: JSON.stringify({ language: "es" }),
+        requestJson: JSON.stringify({}),
         responseJson: JSON.stringify({ game_type: "word-pass", game: { words: [] } }),
         createdAt: new Date("2026-04-15T18:00:00.000Z"),
       },
@@ -99,11 +98,10 @@ describe("GenerationService", () => {
         id: "valid-word-pass",
         gameType: "word-pass",
         query: "valid rosco",
-        language: "es",
         status: "created",
         categoryId: "9",
         categoryName: "General Knowledge",
-        requestJson: JSON.stringify({ language: "es" }),
+        requestJson: JSON.stringify({}),
         responseJson: JSON.stringify({
           game_type: "word-pass",
           game: {
@@ -125,7 +123,7 @@ describe("GenerationService", () => {
 
     expect(result).toHaveLength(1);
     expect(result[0]?.id).toBe("valid-word-pass");
-    expect(result[0]?.request).toEqual({ language: "es" });
+    expect(result[0]?.request).toEqual({});
     expect(warnSpy).toHaveBeenCalledWith(
       "Skipping invalid stored word-pass model",
       "invalid-word-pass",
@@ -142,11 +140,10 @@ describe("GenerationService", () => {
         id: "invalid-word-pass",
         gameType: "word-pass",
         query: "invalid rosco",
-        language: "es",
         status: "created",
         categoryId: "9",
         categoryName: "General Knowledge",
-        requestJson: JSON.stringify({ language: "es" }),
+        requestJson: JSON.stringify({}),
         responseJson: JSON.stringify({ game_type: "word-pass", game: { words: [] } }),
         createdAt: new Date("2026-04-15T18:00:00.000Z"),
       },
@@ -154,11 +151,10 @@ describe("GenerationService", () => {
         id: "valid-word-pass",
         gameType: "word-pass",
         query: "valid rosco",
-        language: "es",
         status: "created",
         categoryId: "9",
         categoryName: "General Knowledge",
-        requestJson: JSON.stringify({ language: "es", item_count: "3" }),
+        requestJson: JSON.stringify({ item_count: "3" }),
         responseJson: JSON.stringify({
           game_type: "word-pass",
           game: {
@@ -184,7 +180,7 @@ describe("GenerationService", () => {
       "Generated word-pass has no words — rejecting incomplete content",
     );
     expect(result[1]?.id).toBe("valid-word-pass");
-    expect(result[1]?.request).toEqual({ language: "es", item_count: "3" });
+    expect(result[1]?.request).toEqual({ item_count: "3" });
     expect(warnSpy).toHaveBeenCalledWith(
       "Stored word-pass history item is invalid but still exposed for backoffice",
       "invalid-word-pass",

@@ -34,9 +34,7 @@ describe("games routes", () => {
     const response = await app.inject({
       method: "POST",
       url: "/games/generate",
-      payload: {
-        language: "es",
-      },
+      payload: {},
     });
 
     expect(response.statusCode).toBe(400);
@@ -77,7 +75,6 @@ describe("games routes", () => {
       url: "/games/generate",
       payload: {
         categoryId: "11",
-        language: "es",
         difficultyPercentage: 55,
         itemCount: 5,
       },
@@ -130,7 +127,7 @@ describe("games routes", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/games/history?limit=400&page=2&pageSize=30&status=validated&language=es",
+      url: "/games/history?limit=400&page=2&pageSize=30&status=validated",
     });
 
     expect(response.statusCode).toBe(200);
@@ -157,12 +154,12 @@ describe("games routes", () => {
     const circuitOpen = await app.inject({
       method: "POST",
       url: "/games/generate",
-      payload: { categoryId: "9", language: "es" },
+      payload: { categoryId: "9" },
     });
     const upstreamFailure = await app.inject({
       method: "POST",
       url: "/games/generate",
-      payload: { categoryId: "9", language: "es" },
+      payload: { categoryId: "9" },
     });
 
     expect(circuitOpen.statusCode).toBe(503);
@@ -189,7 +186,7 @@ describe("games routes", () => {
     const invalidStart = await app.inject({
       method: "POST",
       url: "/games/generate/process",
-      payload: { language: "es" },
+      payload: {},
     });
     generationService.assertAiGenerationAvailable.mockImplementationOnce(() => {
       throw new Error("ai auth circuit open");
@@ -197,27 +194,27 @@ describe("games routes", () => {
     const unavailableStart = await app.inject({
       method: "POST",
       url: "/games/generate/process",
-      payload: { categoryId: "9", language: "es", count: 4 },
+      payload: { categoryId: "9", count: 4 },
     });
     const started = await app.inject({
       method: "POST",
       url: "/games/generate/process",
-      payload: { categoryId: "9", language: "es", count: 4 },
+      payload: { categoryId: "9", count: 4 },
     });
     const completed = await app.inject({
       method: "POST",
       url: "/games/generate/process/wait",
-      payload: { categoryId: "9", language: "es", count: 3 },
+      payload: { categoryId: "9", count: 3 },
     });
     const circuitWait = await app.inject({
       method: "POST",
       url: "/games/generate/process/wait",
-      payload: { categoryId: "9", language: "es", count: 3 },
+      payload: { categoryId: "9", count: 3 },
     });
     const failedWait = await app.inject({
       method: "POST",
       url: "/games/generate/process/wait",
-      payload: { categoryId: "9", language: "es", count: 3 },
+      payload: { categoryId: "9", count: 3 },
     });
     const invalidList = await app.inject({
       method: "GET",
@@ -283,7 +280,6 @@ describe("games routes", () => {
         documents: [{ content: "Wordpass content", metadata: { origin: "seed" } }],
         source: "backoffice",
         categoryId: "9",
-        language: "es",
         difficultyPercentage: 60,
       },
     });
@@ -327,12 +323,13 @@ describe("games routes", () => {
       .mockResolvedValueOnce(true);
     generationService.groupedModelsSummary.mockResolvedValue({ categories: [{ name: "General", total: 1 }], matrix: [{ categoryId: "9", total: 1 }] });
     generationService.getCatalogSnapshot.mockReturnValue({ source: "seed", categories: [{ id: "9" }], languages: [{ code: "es" }] });
+    generationService.getCatalogSnapshot.mockReturnValue({ source: "seed", categories: [{ id: "9" }] });
 
     await gameRoutes(app, generationService as never);
 
     const random = await app.inject({
       method: "GET",
-      url: "/games/models/random?count=2&language=es",
+      url: "/games/models/random?count=2",
     });
     const invalidManual = await app.inject({
       method: "POST",
@@ -342,17 +339,17 @@ describe("games routes", () => {
     const manual = await app.inject({
       method: "POST",
       url: "/games/history/manual",
-      payload: { categoryId: "9", language: "es", difficultyPercentage: 40, content: { words: [{ answer: "Q" }] } },
+      payload: { categoryId: "9", difficultyPercentage: 40, content: { words: [{ answer: "Q" }] } },
     });
     const duplicateManual = await app.inject({
       method: "POST",
       url: "/games/history/manual",
-      payload: { categoryId: "9", language: "es", difficultyPercentage: 40, content: { words: [{ answer: "Q" }] } },
+      payload: { categoryId: "9", difficultyPercentage: 40, content: { words: [{ answer: "Q" }] } },
     });
     const invalidManualError = await app.inject({
       method: "POST",
       url: "/games/history/manual",
-      payload: { categoryId: "9", language: "es", difficultyPercentage: 40, content: { words: [{ answer: "Q" }] } },
+      payload: { categoryId: "9", difficultyPercentage: 40, content: { words: [{ answer: "Q" }] } },
     });
     const invalidDelete = await app.inject({
       method: "DELETE",
@@ -445,7 +442,7 @@ describe("games routes", () => {
     const generateUnknown = await app.inject({
       method: "POST",
       url: "/games/generate",
-      payload: { categoryId: "9", language: "es" },
+      payload: { categoryId: "9" },
     });
     generationService.assertAiGenerationAvailable.mockImplementationOnce(() => {
       throw "boom";
@@ -453,17 +450,17 @@ describe("games routes", () => {
     const processStartUnknown = await app.inject({
       method: "POST",
       url: "/games/generate/process",
-      payload: { categoryId: "9", language: "es", count: 2 },
+      payload: { categoryId: "9", count: 2 },
     });
     const invalidWaitPayload = await app.inject({
       method: "POST",
       url: "/games/generate/process/wait",
-      payload: { language: "es" },
+      payload: {},
     });
     const waitUnknown = await app.inject({
       method: "POST",
       url: "/games/generate/process/wait",
-      payload: { categoryId: "9", language: "es", count: 2 },
+      payload: { categoryId: "9", count: 2 },
     });
     const invalidProcessQuery = await app.inject({
       method: "GET",
@@ -481,7 +478,7 @@ describe("games routes", () => {
     const manualUnknown = await app.inject({
       method: "POST",
       url: "/games/history/manual",
-      payload: { categoryId: "9", language: "es", difficultyPercentage: 40, content: { words: [{ answer: "Q" }] } },
+      payload: { categoryId: "9", difficultyPercentage: 40, content: { words: [{ answer: "Q" }] } },
     });
     const patchUnknown = await app.inject({
       method: "PATCH",
