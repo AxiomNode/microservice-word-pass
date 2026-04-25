@@ -213,11 +213,10 @@ describe("GenerationService", () => {
         id: "entry-3",
         gameType: "word-pass",
         query: "old",
-        language: "es",
         status: "manual",
         categoryId: "9",
         categoryName: "General Knowledge",
-        requestJson: JSON.stringify({ categoryId: "9", language: "es", difficulty_percentage: 40 }),
+        requestJson: JSON.stringify({ categoryId: "9", difficulty_percentage: 40 }),
         responseJson: JSON.stringify({
           game_type: "word-pass",
           game: {
@@ -238,12 +237,11 @@ describe("GenerationService", () => {
     prismaMocks.update.mockResolvedValue({
       id: "entry-3",
       gameType: "word-pass",
-      query: "General Knowledge manual curation es difficulty 65",
-      language: "es",
+      query: "Pista",
       status: "pending_review",
       categoryId: "9",
       categoryName: "General Knowledge",
-      requestJson: JSON.stringify({ source: "backoffice-manual", categoryId: "9", language: "es", difficulty_percentage: 65 }),
+      requestJson: JSON.stringify({ source: "backoffice-manual", categoryId: "9", difficulty_percentage: 65 }),
       responseJson: JSON.stringify({
         game_type: "word-pass",
         game: {
@@ -383,8 +381,7 @@ describe("GenerationService", () => {
     prismaMocks.create.mockResolvedValue({
       id: "manual-1",
       gameType: "word-pass",
-      query: "General Knowledge manual curation es difficulty 45",
-      language: "es",
+      query: "Pista",
       status: "validated",
       categoryId: "9",
       categoryName: "General Knowledge",
@@ -829,8 +826,7 @@ describe("GenerationService", () => {
     prismaMocks.create.mockResolvedValueOnce({
       id: "manual-default",
       gameType: "word-pass",
-      query: "General Knowledge manual curation es difficulty 35",
-      language: "es",
+      query: "Pista",
       status: "manual",
       categoryId: "9",
       categoryName: "General Knowledge",
