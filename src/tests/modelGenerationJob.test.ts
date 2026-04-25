@@ -79,7 +79,7 @@ describe("ModelGenerationJob", () => {
     const logger = createLogger();
     const generationService = {
       runAiAuthSmokeCheck: vi.fn().mockResolvedValue({ ok: true }),
-      refreshCatalogs: vi.fn().mockResolvedValue({ source: "seed", categories: [{ id: "1" }], languages: [{ code: "es" }] }),
+      refreshCatalogs: vi.fn().mockResolvedValue({ source: "seed", categories: [{ id: "1" }] }),
       generateBatchModels: vi.fn().mockResolvedValue({ requested: 4, attempts: 5, created: 3, duplicates: 1, failed: 0 }),
     };
 
@@ -113,7 +113,7 @@ describe("ModelGenerationJob", () => {
     const logger = createLogger();
     const generationService = {
       runAiAuthSmokeCheck: vi.fn().mockResolvedValue({ ok: true }),
-      refreshCatalogs: vi.fn().mockResolvedValue({ source: "seed", categories: [], languages: [] }),
+      refreshCatalogs: vi.fn().mockResolvedValue({ source: "seed", categories: [] }),
       generateBatchModels: vi.fn().mockResolvedValue({ requested: 1, attempts: 1, created: 1, duplicates: 0, failed: 0 }),
     };
 

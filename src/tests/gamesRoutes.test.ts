@@ -322,7 +322,6 @@ describe("games routes", () => {
       .mockResolvedValueOnce(false)
       .mockResolvedValueOnce(true);
     generationService.groupedModelsSummary.mockResolvedValue({ categories: [{ name: "General", total: 1 }], matrix: [{ categoryId: "9", total: 1 }] });
-    generationService.getCatalogSnapshot.mockReturnValue({ source: "seed", categories: [{ id: "9" }], languages: [{ code: "es" }] });
     generationService.getCatalogSnapshot.mockReturnValue({ source: "seed", categories: [{ id: "9" }] });
 
     await gameRoutes(app, generationService as never);

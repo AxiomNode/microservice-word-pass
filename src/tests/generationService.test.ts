@@ -338,7 +338,6 @@ describe("GenerationService", () => {
     (service as any).client.getCatalogs = vi.fn()
       .mockResolvedValueOnce({
         categories: [{ id: "11", name: "Film" }],
-        languages: [{ code: "ES", name: "Spanish" }],
       })
       .mockRejectedValueOnce(new Error("ai-engine error 401 unauthorized"));
 
@@ -438,8 +437,8 @@ describe("GenerationService", () => {
     const service = new GenerationService(createConfig());
     (service as any).client.ingest = vi.fn().mockResolvedValue({ ingested: 3 });
     prismaMocks.groupBy.mockResolvedValue([
-      { categoryId: "9", categoryName: "General Knowledge", language: "es", _count: { _all: 2 } },
-      { categoryId: "10", categoryName: "Books", language: "en", _count: { _all: 1 } },
+      { categoryId: "9", categoryName: "General Knowledge", _count: { _all: 2 } },
+      { categoryId: "10", categoryName: "Books", _count: { _all: 1 } },
     ]);
 
     const explicit = await service.ingestToRag([{ content: "A" }], "custom-source");
@@ -626,8 +625,7 @@ describe("GenerationService", () => {
       throw new Error("Unsupported categoryId: xx");
     });
 
-    await serviceAny.runGenerationProcess("task-fail", { categoryId: "xx", language: "es", count: 2 });
-
+    await serviceAny.runGenerationProcess("task-fail", { categoryId: "xx", count: 2 });
     expect(service.getGenerationProcess("task-fail")).toMatchObject({
       status: "failed",
       failed: 2,
@@ -756,7 +754,6 @@ describe("GenerationService", () => {
         id: "entry-1",
         gameType: "word-pass",
         query: "old",
-        language: "es",
         status: "manual",
         categoryId: null,
         categoryName: null,
@@ -769,7 +766,6 @@ describe("GenerationService", () => {
         id: "entry-2",
         gameType: "word-pass",
         query: "old",
-        language: "es",
         status: "manual",
         categoryId: "9",
         categoryName: "General Knowledge",
@@ -936,7 +932,7 @@ describe("GenerationService", () => {
     const filteredStatus = service.listGenerationProcesses({ status: "failed" });
     const filteredRequester = service.listGenerationProcesses({ requestedBy: "backoffice" });
     const missing = service.getGenerationProcess("missing-task");
-    await serviceAny.runGenerationProcess("missing-task", { categoryId: "9", language: "es", count: 1 });
+    await serviceAny.runGenerationProcess("missing-task", { categoryId: "9", count: 1 });
 
     expect(started.requestedBy).toBe("api");
     expect(defaultList.length).toBeGreaterThan(0);
@@ -965,10 +961,10 @@ describe("GenerationService", () => {
       generatedItems: [],
       errors: [],
     });
-    serviceAny.buildResolvedInput = vi.fn().mockReturnValue({ categoryId: "9", language: "es", query: "resolved", numQuestions: 5 });
+    serviceAny.buildResolvedInput = vi.fn().mockReturnValue({ categoryId: "9", query: "resolved", numQuestions: 5 });
     serviceAny.generateAndStoreWithResult = vi.fn().mockRejectedValueOnce("boom");
 
-    await serviceAny.runGenerationProcess("task-only-failures", { categoryId: "9", language: "es", count: 1 });
+    await serviceAny.runGenerationProcess("task-only-failures", { categoryId: "9", count: 1 });
 
     expect(service.getGenerationProcess("task-only-failures")).toMatchObject({
       status: "failed",
@@ -995,7 +991,7 @@ describe("GenerationService", () => {
       throw "bad-input";
     });
 
-    await serviceAny.runGenerationProcess("task-invalid-input", { categoryId: "9", language: "es", count: 1 });
+    await serviceAny.runGenerationProcess("task-invalid-input", { categoryId: "9", count: 1 });
 
     expect(service.getGenerationProcess("task-invalid-input")).toMatchObject({
       status: "failed",
