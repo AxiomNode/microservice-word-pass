@@ -13,6 +13,7 @@ import {
   mapStoredHistoryModels as mapStoredHistoryModelsShared,
   mapStoredModel as mapStoredModelShared,
   mapStoredModelsSafely as mapStoredModelsSafelyShared,
+  normalizeManualContent as normalizeManualContentShared,
   normalizeContentToken as normalizeContentTokenShared,
   parseStoredJsonSafely as parseStoredJsonSafelyShared,
   registerAiAuthFailureState,
@@ -1127,18 +1128,7 @@ export class GenerationService {
   }
 
   private normalizeManualContent(content: Record<string, unknown>): Record<string, unknown> {
-    const entries = Object.entries(content).filter(([, value]) => value !== null && value !== undefined);
-    if (entries.length === 0) {
-      throw new Error("Invalid content payload");
-    }
-
-    const compact = Object.fromEntries(entries);
-    const serialized = this.stableStringify(compact);
-    if (serialized.length < 8) {
-      throw new Error("Invalid content payload");
-    }
-
-    return compact;
+    return normalizeManualContentShared(content);
   }
 
   private buildUniquenessKey(gameType: string, payload: unknown): string {
