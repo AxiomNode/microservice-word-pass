@@ -2,7 +2,12 @@ import { Prisma } from "@prisma/client";
 import {
   buildCategoryDimensionMatrix,
   buildStoredRequestPayload,
+  mapStoredHistoryModel as mapStoredHistoryModelShared,
+  mapStoredHistoryModels as mapStoredHistoryModelsShared,
+  mapStoredModel as mapStoredModelShared,
+  mapStoredModelsSafely as mapStoredModelsSafelyShared,
   parseStoredJsonSafely as parseStoredJsonSafelyShared,
+  type StoredGameRow,
   validateStoredHistoryPayload as validateStoredHistoryPayloadShared,
 } from "@axiomnode/shared-sdk-client";
 import { createHash, randomUUID } from "node:crypto";
@@ -1000,103 +1005,33 @@ export class GenerationService {
     return buildCategoryDimensionMatrix(this.categories);
   }
 
-  private mapStoredModel(item: {
-    id: string;
-    gameType: string;
-    query: string;
-    status: string;
-    categoryId: string | null;
-    categoryName: string | null;
-    requestJson: string;
-    responseJson: string;
-    createdAt: Date;
-  }): StoredGameModel {
-    return {
-      id: item.id,
-      gameType: item.gameType,
-      query: item.query,
-      status: item.status,
-      categoryId: item.categoryId,
-      categoryName: item.categoryName,
-      request: this.parseJson(item.requestJson),
-      response: this.sanitizeGeneratedPayload(this.parseJson(item.responseJson)),
-      createdAt: item.createdAt
-    };
+  private mapStoredModel(item: StoredGameRow): StoredGameModel {
+    return mapStoredModelShared<StoredGameModel>(
+      item,
+      (value) => this.parseJson(value),
+      (payload) => this.sanitizeGeneratedPayload(payload),
+    );
   }
 
-  private mapStoredHistoryModel(item: {
-    id: string;
-    gameType: string;
-    query: string;
-    status: string;
-    categoryId: string | null;
-    categoryName: string | null;
-    requestJson: string;
-    responseJson: string;
-    createdAt: Date;
-  }): StoredGameModel {
-    const request = this.parseStoredJsonSafely(item.requestJson);
-    const response = this.parseStoredJsonSafely(item.responseJson);
-    const responseValidationError = this.validateStoredHistoryPayload(response.value, item.id, "word-pass");
-
-    return {
-      id: item.id,
-      gameType: item.gameType,
-      query: item.query,
-      status: item.status,
-      categoryId: item.categoryId,
-      categoryName: item.categoryName,
-      request: request.value,
-      response: response.value,
-      ...(responseValidationError ? { responseValidationError } : {}),
-      createdAt: item.createdAt
-    };
+  private mapStoredHistoryModel(item: StoredGameRow): StoredGameModel {
+    return mapStoredHistoryModelShared<StoredGameModel>(
+      item,
+      "word-pass",
+      (value) => this.parseStoredJsonSafely(value),
+      (payload, itemId, gameLabel) => this.validateStoredHistoryPayload(payload, itemId, gameLabel),
+    );
   }
 
-  private mapStoredModelsSafely(
-    items: Array<{
-      id: string;
-      gameType: string;
-      query: string;
-      status: string;
-      categoryId: string | null;
-      categoryName: string | null;
-      requestJson: string;
-      responseJson: string;
-      createdAt: Date;
-    }>
-  ): StoredGameModel[] {
-    const validItems: StoredGameModel[] = [];
-
-    for (const item of items) {
-      try {
-        validItems.push(this.mapStoredModel(item));
-      } catch (error) {
-        console.warn(
-          "Skipping invalid stored word-pass model",
-          item.id,
-          error instanceof Error ? error.message : "Unknown error"
-        );
-      }
-    }
-
-    return validItems;
+  private mapStoredModelsSafely(items: StoredGameRow[]): StoredGameModel[] {
+    return mapStoredModelsSafelyShared(
+      items,
+      "Skipping invalid stored word-pass model",
+      (item) => this.mapStoredModel(item),
+    );
   }
 
-  private mapStoredHistoryModels(
-    items: Array<{
-      id: string;
-      gameType: string;
-      query: string;
-      status: string;
-      categoryId: string | null;
-      categoryName: string | null;
-      requestJson: string;
-      responseJson: string;
-      createdAt: Date;
-    }>
-  ): StoredGameModel[] {
-    return items.map((item) => this.mapStoredHistoryModel(item));
+  private mapStoredHistoryModels(items: StoredGameRow[]): StoredGameModel[] {
+    return mapStoredHistoryModelsShared(items, (item) => this.mapStoredHistoryModel(item));
   }
 
   private parseStoredJsonSafely(value: string): { value: unknown } {
