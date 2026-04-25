@@ -492,7 +492,8 @@ describe("games routes", () => {
     expect(invalidWaitPayload.statusCode).toBe(400);
     expect(waitUnknown.statusCode).toBe(502);
     expect(waitUnknown.json()).toMatchObject({ error: "Unknown error" });
-    expect(invalidProcessQuery.statusCode).toBe(404);
+    expect(invalidProcessQuery.statusCode).toBe(400);
+    expect(invalidProcessQuery.json()).toMatchObject({ message: "Invalid query parameters" });
     expect(historyInvalid.statusCode).toBe(400);
     expect(ingestUnknown.statusCode).toBe(502);
     expect(ingestUnknown.json()).toMatchObject({ error: "Unknown error" });
