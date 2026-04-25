@@ -6,14 +6,17 @@ import {
   ensureAiAuthCircuitClosedState,
   extractAiEngineStatusCode as extractAiEngineStatusCodeShared,
   extractDifficultyFromRequest as extractDifficultyFromRequestShared,
+  getGameCategoryOrThrow,
   isAiAuthCircuitOpenError as isAiAuthCircuitOpenErrorShared,
   mapStoredHistoryModel as mapStoredHistoryModelShared,
   mapStoredHistoryModels as mapStoredHistoryModelsShared,
   mapStoredModel as mapStoredModelShared,
   mapStoredModelsSafely as mapStoredModelsSafelyShared,
+  normalizeContentToken as normalizeContentTokenShared,
   parseStoredJsonSafely as parseStoredJsonSafelyShared,
   registerAiAuthFailureState,
   registerAiAuthSuccessState,
+  stableStringify as stableStringifyShared,
   type StoredGameRow,
   validateStoredHistoryPayload as validateStoredHistoryPayloadShared,
 } from "@axiomnode/shared-sdk-client";
@@ -1203,13 +1206,7 @@ export class GenerationService {
   }
 
   private normalizeContentToken(value: string): string {
-    return value
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
+    return normalizeContentTokenShared(value);
   }
 
   private extractDifficultyFromRequest(requestPayload: unknown): number | undefined {
@@ -1217,29 +1214,11 @@ export class GenerationService {
   }
 
   private stableStringify(value: unknown): string {
-    if (value === null || typeof value !== "object") {
-      return JSON.stringify(value);
-    }
-
-    if (Array.isArray(value)) {
-      return `[${value.map((item) => this.stableStringify(item)).join(",")}]`;
-    }
-
-    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) =>
-      a.localeCompare(b)
-    );
-    const body = entries
-      .map(([key, item]) => `${JSON.stringify(key)}:${this.stableStringify(item)}`)
-      .join(",");
-    return `{${body}}`;
+    return stableStringifyShared(value);
   }
 
   private getCategoryOrThrow(categoryId: string): { id: string; name: string } {
-    const category = this.categoryById.get(categoryId);
-    if (!category) {
-      throw new Error(`Unsupported categoryId: ${categoryId}`);
-    }
-    return category;
+    return getGameCategoryOrThrow(this.categoryById, categoryId);
   }
 
   private ensureAiAuthCircuitClosed(): void {
