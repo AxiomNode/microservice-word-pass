@@ -3,6 +3,7 @@ import {
   type AiAuthCircuitState,
   buildCategoryDimensionMatrix,
   buildStoredRequestPayload,
+  createGameGenerationProcessTask,
   ensureAiAuthCircuitClosedState,
   extractStringArrayFromObjects as extractStringArrayFromObjectsShared,
   extractAiEngineStatusCode as extractAiEngineStatusCodeShared,
@@ -18,11 +19,16 @@ import {
   parseJson as parseJsonShared,
   parseStoredJsonSafely as parseStoredJsonSafelyShared,
   pickRange as pickRangeShared,
+  pruneGameGenerationProcesses,
   registerAiAuthFailureState,
   registerAiAuthSuccessState,
   resolveRequestedItemCount as resolveRequestedItemCountShared,
   stableStringify as stableStringifyShared,
   type StoredGameRow,
+  type GameGenerationProcessSnapshot as SharedGenerationProcessSnapshot,
+  type GameGenerationProcessTask as SharedGenerationProcessTask,
+  listGameGenerationProcesses,
+  toGameGenerationProcessSnapshot,
   validateStoredHistoryPayload as validateStoredHistoryPayloadShared,
 } from "@axiomnode/shared-sdk-client";
 import { createHash, randomUUID } from "node:crypto";
@@ -103,29 +109,7 @@ export interface GenerationProcessInput extends GenerateInput {
 }
 
 /** Progress and result snapshot of an ongoing or completed generation process. */
-export interface GenerationProcessSnapshot {
-  taskId: string;
-  requestedBy: "api" | "backoffice";
-  status: "running" | "completed" | "failed";
-  requested: number;
-  processed: number;
-  created: number;
-  duplicates: number;
-  duplicateReasons: {
-    content: number;
-  };
-  failed: number;
-  progress: {
-    current: number;
-    total: number;
-    ratio: number;
-  };
-  startedAt: string;
-  updatedAt: string;
-  finishedAt?: string;
-  generatedItems?: unknown[];
-  errors?: string[];
-}
+export interface GenerationProcessSnapshot extends SharedGenerationProcessSnapshot {}
 
 interface ResolvedGenerateInput extends GenerateInput {
   query: string;
@@ -200,22 +184,7 @@ interface StoredGameModel {
   createdAt: Date;
 }
 
-interface GenerationProcessTask {
-  taskId: string;
-  requestedBy: "api" | "backoffice";
-  status: "running" | "completed" | "failed";
-  requested: number;
-  processed: number;
-  created: number;
-  duplicates: number;
-  duplicateByContent: number;
-  failed: number;
-  startedAt: string;
-  updatedAt: string;
-  finishedAt?: string;
-  generatedItems: unknown[];
-  errors: string[];
-}
+interface GenerationProcessTask extends SharedGenerationProcessTask {}
 
 const PROMPT_VARIANTS = [
   "fundamentals",
@@ -467,21 +436,7 @@ export class GenerationService {
   }
 
   startGenerationProcess(input: GenerationProcessInput): GenerationProcessSnapshot {
-    const task: GenerationProcessTask = {
-      taskId: randomUUID(),
-      requestedBy: input.requestedBy === "backoffice" ? "backoffice" : "api",
-      status: "running",
-      requested: input.count,
-      processed: 0,
-      created: 0,
-      duplicates: 0,
-      duplicateByContent: 0,
-      failed: 0,
-      startedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      generatedItems: [],
-      errors: []
-    };
+    const task: GenerationProcessTask = createGameGenerationProcessTask(randomUUID(), input);
 
     this.generationProcesses.set(task.taskId, task);
     this.pruneGenerationProcesses();
@@ -492,22 +447,7 @@ export class GenerationService {
   }
 
   async runGenerationProcessBlocking(input: GenerationProcessInput): Promise<GenerationProcessSnapshot> {
-    const task: GenerationProcessTask = {
-      taskId: randomUUID(),
-      requestedBy: input.requestedBy === "backoffice" ? "backoffice" : "api",
-      status: "running",
-      requested: input.count,
-      processed: 0,
-      created: 0,
-      duplicates: 0,
-      duplicateByContent: 0,
-      failed: 0,
-      startedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      finishedAt: undefined,
-      generatedItems: [],
-      errors: []
-    };
+    const task: GenerationProcessTask = createGameGenerationProcessTask(randomUUID(), input);
 
     this.generationProcesses.set(task.taskId, task);
     this.pruneGenerationProcesses();
@@ -532,20 +472,7 @@ export class GenerationService {
     status?: "running" | "completed" | "failed";
     requestedBy?: "api" | "backoffice";
   }): GenerationProcessSnapshot[] {
-    const limit = options?.limit ?? 20;
-    return [...this.generationProcesses.values()]
-      .filter((task) => {
-        if (options?.status && task.status !== options.status) {
-          return false;
-        }
-        if (options?.requestedBy && task.requestedBy !== options.requestedBy) {
-          return false;
-        }
-        return true;
-      })
-      .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
-      .slice(0, Math.max(1, limit))
-        .map((task) => this.toGenerationProcessSnapshot(task, false));
+    return listGameGenerationProcesses(this.generationProcesses.values(), options);
   }
 
   async generateBatchModels(options?: BatchGenerationOptions): Promise<BatchGenerationResult> {
@@ -840,47 +767,11 @@ export class GenerationService {
     task: GenerationProcessTask,
     includeItems = false
   ): GenerationProcessSnapshot {
-    const total = Math.max(1, task.requested);
-    return {
-      taskId: task.taskId,
-      requestedBy: task.requestedBy,
-      status: task.status,
-      requested: task.requested,
-      processed: task.processed,
-      created: task.created,
-      duplicates: task.duplicates,
-      duplicateReasons: {
-        content: task.duplicateByContent
-      },
-      failed: task.failed,
-      progress: {
-        current: task.processed,
-        total: task.requested,
-        ratio: Math.min(1, task.processed / total)
-      },
-      startedAt: task.startedAt,
-      updatedAt: task.updatedAt,
-      ...(task.finishedAt ? { finishedAt: task.finishedAt } : {}),
-      ...(includeItems ? { generatedItems: task.generatedItems } : {}),
-      ...(task.errors.length > 0 ? { errors: task.errors } : {})
-    };
+    return toGameGenerationProcessSnapshot(task, includeItems);
   }
 
   private pruneGenerationProcesses(): void {
-    if (this.generationProcesses.size <= this.generationProcessRetentionLimit) {
-      return;
-    }
-
-    const removable = [...this.generationProcesses.values()]
-      .filter((task) => task.status !== "running")
-      .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt));
-
-    for (const task of removable) {
-      if (this.generationProcesses.size <= this.generationProcessRetentionLimit) {
-        break;
-      }
-      this.generationProcesses.delete(task.taskId);
-    }
+    pruneGameGenerationProcesses(this.generationProcesses, this.generationProcessRetentionLimit);
   }
 
   private buildResolvedInput(
