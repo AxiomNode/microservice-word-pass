@@ -9,7 +9,7 @@ import { AppConfig } from "../app/config.js";
 import {
   registerPrivateDocs,
   resolvePrivateDocsToken
-} from "../app/plugins/privateDocs.js";
+} from "@axiomnode/shared-sdk-client/private-docs";
 
 function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   return {

@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 
 import { loadConfig } from "./config.js";
 import { prisma } from "./db/client.js";
-import { registerPrivateDocs } from "./plugins/privateDocs.js";
+import { registerPrivateDocs } from "@axiomnode/shared-sdk-client/private-docs";
 import { gameRoutes } from "./routes/games.js";
 import { healthRoutes } from "./routes/health.js";
 import { GenerationService } from "./services/generationService.js";
