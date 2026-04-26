@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import {
   type AiAuthCircuitState,
+  buildGroupedSummary,
   buildGameHistoryWhere,
   buildCategoryDimensionMatrix,
   buildStoredRequestPayload,
@@ -612,29 +613,7 @@ export class GenerationService {
       _count: { _all: true }
     });
 
-    const matrix = rows
-      .filter((row) => row.categoryId && row.categoryName)
-      .map((row) => ({
-        categoryId: row.categoryId as string,
-        categoryName: row.categoryName as string,
-        total: row._count._all
-      }));
-
-    const categories = this.categories.map((category) => {
-      const total = matrix
-        .filter((row) => row.categoryId === category.id)
-        .reduce((sum, row) => sum + row.total, 0);
-      return {
-        categoryId: category.id,
-        categoryName: category.name,
-        total
-      };
-    });
-
-    const result: GroupedModelsSummary = {
-      categories,
-      matrix
-    };
+    const result: GroupedModelsSummary = buildGroupedSummary(this.categories, rows);
 
     this.groupedSummaryCache = {
       data: result,
