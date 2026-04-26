@@ -4,6 +4,7 @@ import {
   buildGroupedSummary,
   buildGameHistoryWhere,
   buildCategoryDimensionMatrix,
+  buildGameRandomModelsWhere,
   buildStoredRequestPayload,
   createGameGenerationProcessTask,
   ensureAiAuthCircuitClosedState,
@@ -18,6 +19,7 @@ import {
   mapStoredModelsSafely as mapStoredModelsSafelyShared,
   normalizeGameHistoryLimit,
   normalizeGameHistoryPage,
+  pickRandomGameModels,
   normalizeManualContent as normalizeManualContentShared,
   normalizeContentToken as normalizeContentTokenShared,
   parseJson as parseJsonShared,
@@ -27,6 +29,7 @@ import {
   registerAiAuthFailureState,
   registerAiAuthSuccessState,
   resolveRequestedItemCount as resolveRequestedItemCountShared,
+  resolveGameRandomModelsPoolSize,
   stableStringify as stableStringifyShared,
   type StoredGameRow,
   type GameGenerationProcessSnapshot as SharedGenerationProcessSnapshot,
@@ -556,28 +559,13 @@ export class GenerationService {
   } as const;
 
   async randomModels(filters: RandomModelsFilters): Promise<StoredGameModel[]> {
-    const where: Prisma.GameGenerationWhereInput = {
-      gameType: "word-pass",
-      ...(filters.status ? {} : { status: { not: "pending_review" } }),
-    };
+    const where: Prisma.GameGenerationWhereInput = buildGameRandomModelsWhere(
+      "word-pass",
+      filters,
+      (categoryId) => this.getCategoryOrThrow(categoryId).id
+    );
 
-    if (filters.categoryId) {
-      where.categoryId = this.getCategoryOrThrow(filters.categoryId).id;
-    }
-    if (filters.status) {
-      where.status = filters.status;
-    }
-    if (typeof filters.difficultyPercentage === "number") {
-      where.difficultyPercentage = Math.max(0, Math.min(100, Math.trunc(filters.difficultyPercentage)));
-    }
-    if (filters.createdAfter || filters.createdBefore) {
-      where.createdAt = {
-        ...(filters.createdAfter ? { gte: filters.createdAfter } : {}),
-        ...(filters.createdBefore ? { lte: filters.createdBefore } : {})
-      };
-    }
-
-    const poolSize = Math.min(1000, Math.max(filters.count * 30, 300));
+    const poolSize = resolveGameRandomModelsPoolSize(filters.count);
 
     const candidates = await prisma.gameGeneration.findMany({
       where,
@@ -590,15 +578,7 @@ export class GenerationService {
       return [];
     }
 
-    const shuffled = [...candidates];
-    for (let index = shuffled.length - 1; index > 0; index -= 1) {
-      const swapIndex = Math.floor(Math.random() * (index + 1));
-      const current = shuffled[index];
-      shuffled[index] = shuffled[swapIndex];
-      shuffled[swapIndex] = current;
-    }
-
-    const selected = shuffled.slice(0, Math.min(filters.count, shuffled.length));
+    const selected = pickRandomGameModels(candidates, filters.count);
     return this.mapStoredModelsSafely(selected).slice(0, filters.count);
   }
 
