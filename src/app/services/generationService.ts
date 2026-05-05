@@ -6,8 +6,11 @@ import {
   buildCategoryDimensionMatrix,
   buildGameRandomModelsWhere,
   buildStoredRequestPayload,
+  canonicalizeWordpassModel,
   createGameGenerationProcessTask,
   ensureAiAuthCircuitClosedState,
+  extractWordpassDefinitions,
+  extractWordpassWords,
   extractStringArrayFromObjects as extractStringArrayFromObjectsShared,
   extractAiEngineStatusCode as extractAiEngineStatusCodeShared,
   extractDifficultyFromRequest as extractDifficultyFromRequestShared,
@@ -20,7 +23,6 @@ import {
   normalizeGameHistoryLimit,
   normalizeGameHistoryPage,
   pickRandomGameModels,
-  normalizeManualContent as normalizeManualContentShared,
   normalizeContentToken as normalizeContentTokenShared,
   parseJson as parseJsonShared,
   parseStoredJsonSafely as parseStoredJsonSafelyShared,
@@ -903,7 +905,7 @@ export class GenerationService {
   }
 
   private buildPrimaryWordpassText(payload: unknown, fallback: string): string {
-    const hints = this.extractStringArrayFromObjects(payload, "words", "hint")
+    const hints = extractWordpassDefinitions(payload)
       .map((item) => item.trim())
       .filter((item) => item.length > 0);
 
@@ -914,7 +916,7 @@ export class GenerationService {
       return preferredHint.slice(0, 240);
     }
 
-    const answers = this.extractStringArrayFromObjects(payload, "words", "answer")
+    const answers = extractWordpassWords(payload)
       .map((item) => item.trim())
       .filter((item) => item.length > 0);
     if (answers.length > 0) {
@@ -938,28 +940,7 @@ export class GenerationService {
   }
 
   private sanitizeGeneratedPayload(payload: unknown): unknown {
-    if (!payload || typeof payload !== "object") {
-      throw new Error("Generated payload is not a valid object");
-    }
-    const obj = payload as Record<string, unknown>;
-    const game = (obj.game ?? obj) as Record<string, unknown>;
-    const words = game.words;
-    if (!Array.isArray(words) || words.length === 0) {
-      throw new Error("Generated word-pass has no words — rejecting incomplete content");
-    }
-    for (let i = 0; i < words.length; i++) {
-      const w = words[i] as Record<string, unknown>;
-      if (!w.letter || typeof w.letter !== "string") {
-        throw new Error(`Word ${i} is missing the 'letter' field`);
-      }
-      if (!w.hint || typeof w.hint !== "string") {
-        throw new Error(`Word ${i} is missing the 'hint' field`);
-      }
-      if (!w.answer || typeof w.answer !== "string") {
-        throw new Error(`Word ${i} is missing the 'answer' field`);
-      }
-    }
-    return payload;
+    return canonicalizeWordpassModel(payload);
   }
 
   private parseJson(value: string): unknown {
@@ -967,7 +948,7 @@ export class GenerationService {
   }
 
   private normalizeManualContent(content: Record<string, unknown>): Record<string, unknown> {
-    return normalizeManualContentShared(content);
+    return canonicalizeWordpassModel(content) as unknown as Record<string, unknown>;
   }
 
   private buildUniquenessKey(gameType: string, payload: unknown): string {
@@ -996,7 +977,7 @@ export class GenerationService {
         .join("|");
     }
 
-    const words = this.extractStringArrayFromObjects(payload, "words", "answer");
+    const words = extractWordpassWords(payload);
     if (words.length === 0) {
       return null;
     }

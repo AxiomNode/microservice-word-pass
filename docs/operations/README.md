@@ -1,10 +1,12 @@
 # Operations
 
+Last updated: 2026-05-03.
+
 ## Scope
 
 This section groups repository-local operational references for `microservice-wordpass`.
 
-## Contents
+## Navigation
 
 - `deployment.md`: image build, container run, compose flow, and CI/CD path.
 

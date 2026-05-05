@@ -261,7 +261,7 @@ describe("GenerationService", () => {
     const result = await service.updateHistoryItem("entry-3", {
       difficultyPercentage: 65,
       status: "pending_review",
-      content: { words: [{ answer: "Nueva" }] },
+      content: { words: [{ definition: "Pista nueva", word: "Nueva" }] },
     });
 
     expect(result?.status).toBe("pending_review");
@@ -538,8 +538,12 @@ describe("GenerationService", () => {
     const service = new GenerationService(createConfig());
     const serviceAny = service as any;
 
-    expect(serviceAny.normalizeManualContent({ words: [{ answer: "Nueva" }], notes: null })).toEqual({ words: [{ answer: "Nueva" }] });
-    expect(() => serviceAny.normalizeManualContent({})).toThrow("Invalid content payload");
+    expect(serviceAny.normalizeManualContent({ words: [{ definition: "Pista nueva", word: "Nueva" }], notes: null })).toEqual({
+      game: {
+        words: [{ id: "w-1", definition: "Pista nueva", word: "Nueva" }],
+      },
+    });
+    expect(() => serviceAny.normalizeManualContent({})).toThrow("Generated word-pass has no words");
     expect(serviceAny.buildUniquenessKey("word-pass", {
       words: [{ answer: "Árbol" }],
     })).toBe(
@@ -1005,11 +1009,19 @@ describe("GenerationService", () => {
     const serviceAny = service as any;
 
     expect(() => serviceAny.sanitizeGeneratedPayload(null)).toThrow("Generated payload is not a valid object");
-    expect(serviceAny.sanitizeGeneratedPayload({ words: [{ letter: "A", hint: "Pista", answer: "Algo" }] })).toEqual({ words: [{ letter: "A", hint: "Pista", answer: "Algo" }] });
-    expect(() => serviceAny.sanitizeGeneratedPayload({ words: [{ hint: "Pista", answer: "Algo" }] })).toThrow("missing the 'letter'");
-    expect(() => serviceAny.sanitizeGeneratedPayload({ words: [{ letter: "A", answer: "Algo" }] })).toThrow("missing the 'hint'");
-    expect(() => serviceAny.sanitizeGeneratedPayload({ words: [{ letter: "A", hint: "Pista" }] })).toThrow("missing the 'answer'");
-    expect(() => serviceAny.normalizeManualContent({ a: 1 })).toThrow("Invalid content payload");
+    expect(serviceAny.sanitizeGeneratedPayload({ words: [{ letter: "A", hint: "Pista", answer: "Algo" }] })).toEqual({
+      game: {
+        words: [{ id: "w-1", definition: "Pista", word: "Algo" }],
+      },
+    });
+    expect(serviceAny.sanitizeGeneratedPayload({ words: [{ hint: "Pista", answer: "Algo" }] })).toEqual({
+      game: {
+        words: [{ id: "w-1", definition: "Pista", word: "Algo" }],
+      },
+    });
+    expect(() => serviceAny.sanitizeGeneratedPayload({ words: [{ letter: "A", answer: "Algo" }] })).toThrow("missing the 'definition'");
+    expect(() => serviceAny.sanitizeGeneratedPayload({ words: [{ letter: "A", hint: "Pista" }] })).toThrow("missing the 'word'");
+    expect(() => serviceAny.normalizeManualContent({ a: 1 })).toThrow("Generated word-pass has no words");
     expect(serviceAny.extractPrimaryContentSignature("quiz", { questions: [{ question: "Uno" }, { question: "Dos" }] })).toBe("uno|dos");
     expect(serviceAny.extractPrimaryContentSignature("word-pass", null)).toBeNull();
     expect(serviceAny.extractStringArrayFromObjects({ words: [null, { answer: "Uno" }] }, "words", "answer")).toEqual(["Uno"]);

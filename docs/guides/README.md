@@ -1,10 +1,12 @@
 # Guides
 
+Last updated: 2026-05-03.
+
 ## Scope
 
 This section groups repository-local guides for `microservice-wordpass`.
 
-## Contents
+## Navigation
 
 - `getting-started.md`: local setup, example API calls, and language-policy notes.
 

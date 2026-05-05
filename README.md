@@ -1,22 +1,26 @@
 # microservice-wordpass
 
+Last updated: 2026-05-03.
+
 [![codecov](https://codecov.io/gh/AxiomNode/microservice-wordpass/branch/main/graph/badge.svg)](https://codecov.io/gh/AxiomNode/microservice-wordpass)
 
 TypeScript microservice for word-pass generation and persistence.
 
-## Architectural role
+## Responsibility
 
 `microservice-wordpass` is the word-pass game domain service responsible for generation orchestration, persistence of generated models, and retrieval APIs tailored to the word-pass gameplay domain.
 
 It depends on `ai-engine` for generation but owns domain validation, persistence, and retrieval behavior.
 
-## Responsibilities
+## Runtime role
+
+### Main responsibilities
 
 - Request word-pass generation from `ai-engine`.
 - Persist generated word-pass models and history in PostgreSQL.
 - Expose generation and catalog endpoints for BFF consumers.
 
-## Ownership boundary
+### Ownership boundary
 
 `microservice-wordpass` owns word-pass-domain correctness even when generation originates in `ai-engine`.
 
@@ -27,7 +31,9 @@ That includes:
 - persistence of valid domain payloads
 - retrieval semantics for reusable stored models
 
-## Primary use cases
+## Runtime surface
+
+### Primary use cases
 
 - request word-pass generation for a category and language
 - ingest externally generated word-pass payloads
@@ -35,7 +41,9 @@ That includes:
 - inspect historical generated artifacts
 - expose private docs and health endpoints used during release verification
 
-## Stack
+Detailed generation semantics, repair behavior, and inventory handling are documented in the word-pass capability dossier so this README can stay at repository level.
+
+### Stack
 
 - Node.js 20+
 - Fastify
@@ -44,12 +52,14 @@ That includes:
 - PostgreSQL
 - Vitest
 
-## Project layout
+## Local setup
+
+### Project layout
 
 - `src/`: service code, Prisma schema, tests, and Docker assets.
 - `docs/`: architecture, guides, and operations docs.
 
-## Local development
+### Local development
 
 ```bash
 cd src
@@ -65,16 +75,13 @@ Inject real secrets from the private `secrets` repository when needed:
 node scripts/prepare-runtime-secrets.mjs dev
 ```
 
-## API highlights
+### Route note
 
-- `GET /health`
-- `POST /games/generate`
-- `POST /games/ingest`
-- `GET /games/models/random`
-- `GET /games/models/grouped`
-- `GET /games/history`
+This service owns word-pass generation, ingest, random inventory, grouped inventory, maintenance, and history routes. Use `docs/architecture/README.md` and the word-pass inventory capability dossier for the concrete contract inventory.
 
-## Dependency model
+## Dependencies and contracts
+
+### Dependency model
 
 Primary infrastructure dependency:
 
@@ -90,42 +97,41 @@ Primary consumers:
 - `bff-mobile`
 - `bff-backoffice`
 
-## Private docs
+### Private docs
 
 - Route: `/private/docs`
 - JSON: `/private/docs/json`
 - Auth headers: `X-Private-Docs-Token` or `Authorization: Bearer <token>`
 
-## CI/CD workflow behavior
+## Documentation
 
-- `.github/workflows/ci.yml`
-  - Trigger: push (`main`, `develop`), pull request, manual dispatch.
-  - Job `build-test-lint-audit`: build, test, lint, npm production audit.
-  - Job `docker-smoke-private-docs`: validates container startup + private docs auth behavior.
-  - Job `trigger-platform-infra-build`:
-    - Runs on push to `main`.
-    - Waits for `build-test-lint-audit` and `docker-smoke-private-docs` to succeed before dispatching `platform-infra`.
-    - Dispatches `platform-infra/.github/workflows/build-push.yaml` with `service=microservice-wordpass`.
-    - Requires `PLATFORM_INFRA_DISPATCH_TOKEN` in this repo.
+- `docs/README.md`
+- `docs/architecture/README.md`
+- `docs/guides/README.md`
+- `docs/operations/README.md`
 
-## Deployment automation chain
+## Deployment and operations notes
 
-Push to `main` triggers image rebuild in `platform-infra`, followed by automatic deployment to `stg`.
+### CI/CD and rollout note
 
-## Resilience notes
+CI, smoke checks, and staging rollout behavior are documented in `docs/operations/README.md` and `../docs/operations/cicd-workflow-map.md`.
+
+### Resilience notes
 
 - This service should degrade gracefully when invalid persisted generated rows are encountered.
 - Retry and timeout behavior for `ai-engine` calls should remain explicit in configuration and test coverage.
 - Release confidence depends on both repository validation and central deployment validation.
 
-## Failure boundaries
+### Failure boundaries
 
 - upstream AI returns malformed or weak domain content
 - generation request times out or is rejected because AI runtime is busy
 - persistence fails after successful validation
 - stored invalid rows degrade random selection or history endpoints
 
-## Related documents
+## References
 
 - `docs/architecture/`
 - `docs/operations/`
+- `../docs/guides/capabilities/domain/wordpass-inventory-and-generation.md`
+- `../docs/operations/cicd-workflow-map.md`

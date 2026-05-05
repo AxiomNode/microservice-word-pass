@@ -1,5 +1,13 @@
 # Architecture
 
+Last updated: 2026-05-03.
+
+## Purpose
+
+This section documents the repository-local architecture of `microservice-wordpass`.
+
+## Scope
+
 microservice-wordpass follows a simple layered design:
 - Route layer (Fastify routes)
 - Service layer (ai-engine client + orchestration)
