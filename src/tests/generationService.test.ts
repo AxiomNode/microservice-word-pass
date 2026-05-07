@@ -584,6 +584,7 @@ describe("GenerationService", () => {
         words: [{ answer: "arbol" }],
       }),
     );
+    expect(serviceAny.buildUniquenessKey("word-pass", { game: { words: [] } })).toEqual(expect.any(String));
     expect(serviceAny.extractDifficultyFromRequest({ difficulty_percentage: "120" })).toBe(100);
     expect(serviceAny.extractDifficultyFromRequest({ difficulty_percentage: -5 })).toBe(0);
     expect(serviceAny.extractDifficultyFromRequest("bad")).toBeUndefined();
@@ -594,6 +595,12 @@ describe("GenerationService", () => {
     expect(serviceAny.extractAiEngineStatusCode(new Error("ai-engine error 403 forbidden"))).toBe(403);
     expect(serviceAny.extractAiEngineStatusCode("bad")).toBeNull();
     expect(serviceAny.isAiAuthCircuitOpenError(new Error("AI auth circuit open until tomorrow"))).toBe(true);
+
+    const observer = { onAiAuthCircuitStateChanged: vi.fn() };
+    const circuitService = new GenerationService(createConfig(), observer) as any;
+    circuitService.aiAuthFailureStreak = 1;
+    circuitService.registerAiAuthSuccess();
+    expect(observer.onAiAuthCircuitStateChanged).toHaveBeenCalledWith(expect.objectContaining({ failureStreak: 0 }));
   });
 
   it("runs generation processes and aggregates created, duplicate and failed items", async () => {
