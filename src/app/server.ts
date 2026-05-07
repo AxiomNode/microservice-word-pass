@@ -26,7 +26,7 @@ async function buildServer() {
     onAiAuthCircuitStateChanged: (state) => metrics.recordAiAuthCircuitState(state),
     onProcessStarted: ({ taskId, requested }) => metrics.recordGenerationProcessStarted(requested, taskId),
     onProcessItemProgress: (payload) => metrics.recordLog(
-      payload.status === "failed" ? "error" : "info",
+      payload.status === "failed" || payload.status === "timeout" ? "error" : "info",
       "generation_process_item_progress",
       payload
     ),

@@ -86,7 +86,7 @@ export interface GenerationServiceObserver {
     taskId: string;
     itemIndex: number;
     requested: number;
-    status: "started" | "created" | "duplicate" | "failed";
+    status: "started" | "created" | "duplicate" | "failed" | "timeout";
     durationMs?: number;
     error?: string;
   }) => void;
@@ -682,10 +682,17 @@ export class GenerationService {
         };
 
         try {
-          const result = await this.generateAndStoreWithResult(payload, {
-            category,
-            batchRunId: task.taskId
-          });
+          const result = await this.generateAndStoreWithResult(
+            payload,
+            {
+              category,
+              batchRunId: task.taskId
+            },
+            {
+              maxAttempts: this.resolveGenerationProcessItemMaxAttempts(),
+              timeoutMs: this.resolveGenerationProcessItemTimeoutMs()
+            }
+          );
           if (result.stored) {
             task.created += 1;
             task.generatedItems.push(result.responsePayload);
@@ -719,7 +726,7 @@ export class GenerationService {
             taskId: task.taskId,
             itemIndex: index + 1,
             requested: task.requested,
-            status: "failed",
+            status: this.isTimeoutError(error) ? "timeout" : "failed",
             durationMs: Date.now() - itemStartedAt,
             error: errorMessage
           });
@@ -805,9 +812,22 @@ export class GenerationService {
     return resolveRequestedItemCountShared(input);
   }
 
+  private resolveGenerationProcessItemTimeoutMs(): number {
+    return Math.min(this.config.AI_ENGINE_REQUEST_TIMEOUT_MS, this.config.GAME_GENERATION_ITEM_TIMEOUT_MS);
+  }
+
+  private resolveGenerationProcessItemMaxAttempts(): number {
+    return this.config.GAME_GENERATION_ITEM_RETRY_MAX_ATTEMPTS;
+  }
+
+  private isTimeoutError(error: unknown): boolean {
+    return error instanceof Error && error.name === "TimeoutError";
+  }
+
   private async generateAndStoreWithResult(
     input: ResolvedGenerateInput,
-    metadata?: GenerateStoreMetadata
+    metadata?: GenerateStoreMetadata,
+    requestOptions?: { timeoutMs?: number; maxAttempts?: number }
   ): Promise<GenerateAndStoreResult> {
     const category = this.getCategoryOrThrow(input.categoryId);
 
@@ -831,7 +851,7 @@ export class GenerationService {
 
     let responsePayload: unknown;
     try {
-      responsePayload = await this.client.generate(requestPayload);
+      responsePayload = await this.client.generate(requestPayload, requestOptions);
       this.registerAiAuthSuccess();
     } catch (error) {
       this.registerAiAuthFailure(error);

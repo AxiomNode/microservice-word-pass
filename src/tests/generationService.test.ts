@@ -43,6 +43,8 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     AI_ENGINE_API_KEY: "test-key",
     AI_ENGINE_INGEST_API_KEY: "test-ingest-key",
     AI_ENGINE_REQUEST_TIMEOUT_MS: 420000,
+    GAME_GENERATION_ITEM_TIMEOUT_MS: 90000,
+    GAME_GENERATION_ITEM_RETRY_MAX_ATTEMPTS: 1,
     AI_ENGINE_RETRY_MAX_ATTEMPTS: 3,
     AI_ENGINE_RETRY_INITIAL_DELAY_MS: 1500,
     AI_ENGINE_RETRY_MAX_DELAY_MS: 12000,
@@ -549,6 +551,40 @@ describe("GenerationService", () => {
       requested: 1,
       status: "created",
     }));
+  });
+
+  it("marks generation process item timeouts explicitly", async () => {
+    const observer = { onProcessItemProgress: vi.fn(), onProcessCompleted: vi.fn() };
+    const service = new GenerationService(createConfig({
+      AI_ENGINE_REQUEST_TIMEOUT_MS: 10000,
+      GAME_GENERATION_ITEM_TIMEOUT_MS: 5000,
+      GAME_GENERATION_ITEM_RETRY_MAX_ATTEMPTS: 1,
+    }), observer);
+    const timeoutError = new Error("The operation was aborted due to timeout");
+    timeoutError.name = "TimeoutError";
+
+    (service as any).buildResolvedInput = vi.fn().mockReturnValue({
+      categoryId: "9",
+      difficultyPercentage: 50,
+      letters: "A,B,C",
+      numQuestions: 1,
+      query: "resolved process query",
+    });
+    (service as any).generateAndStoreWithResult = vi.fn().mockRejectedValue(timeoutError);
+
+    const completed = await service.runGenerationProcessBlocking({ categoryId: "9", count: 1 });
+
+    expect(completed).toMatchObject({ status: "failed", processed: 1, failed: 1 });
+    expect(observer.onProcessItemProgress).toHaveBeenLastCalledWith(expect.objectContaining({
+      itemIndex: 1,
+      status: "timeout",
+      error: "The operation was aborted due to timeout",
+    }));
+    expect((service as any).generateAndStoreWithResult).toHaveBeenCalledWith(
+      expect.objectContaining({ categoryId: "9" }),
+      expect.objectContaining({ batchRunId: expect.any(String) }),
+      { maxAttempts: 1, timeoutMs: 5000 }
+    );
   });
 
   it("aggregates batch generation results including duplicates and ai-auth circuit stops", async () => {

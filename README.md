@@ -120,6 +120,7 @@ CI, smoke checks, and staging rollout behavior are documented in `docs/operation
 
 - This service should degrade gracefully when invalid persisted generated rows are encountered.
 - Retry and timeout behavior for `ai-engine` calls should remain explicit in configuration and test coverage.
+- Async generation process items use `GAME_GENERATION_ITEM_TIMEOUT_MS` and `GAME_GENERATION_ITEM_RETRY_MAX_ATTEMPTS` so blocked LLM calls become explicit `timeout` item progress events instead of indefinite `running` tasks.
 - Release confidence depends on both repository validation and central deployment validation.
 
 ### Failure boundaries
