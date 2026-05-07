@@ -518,6 +518,39 @@ describe("GenerationService", () => {
     expect(observer.onProcessCompleted).toHaveBeenCalledTimes(2);
   });
 
+  it("emits item progress events while running generation processes", async () => {
+    const observer = { onProcessStarted: vi.fn(), onProcessItemProgress: vi.fn(), onProcessCompleted: vi.fn() };
+    const service = new GenerationService(createConfig(), observer);
+
+    (service as any).buildResolvedInput = vi.fn().mockReturnValue({
+      categoryId: "9",
+      difficultyPercentage: 50,
+      numQuestions: 1,
+      query: "resolved process query",
+    });
+    (service as any).generateAndStoreWithResult = vi.fn().mockResolvedValue({
+      stored: true,
+      responsePayload: { id: "generated-process-1" },
+    });
+
+    const completed = await service.runGenerationProcessBlocking({ categoryId: "9", itemCount: 1, count: 1, requestedBy: "backoffice" });
+
+    expect(completed).toMatchObject({ status: "completed", requested: 1, processed: 1, created: 1 });
+    expect(completed).toHaveProperty("lastProgressAt");
+    expect(completed).toHaveProperty("idleSeconds");
+    expect(completed).toHaveProperty("stalled", false);
+    expect(observer.onProcessItemProgress).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      itemIndex: 1,
+      requested: 1,
+      status: "started",
+    }));
+    expect(observer.onProcessItemProgress).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      itemIndex: 1,
+      requested: 1,
+      status: "created",
+    }));
+  });
+
   it("aggregates batch generation results including duplicates and ai-auth circuit stops", async () => {
     const observer = { onBatchCompleted: vi.fn() };
     const service = new GenerationService(createConfig({ BATCH_GENERATION_CONCURRENCY: 1 }), observer);

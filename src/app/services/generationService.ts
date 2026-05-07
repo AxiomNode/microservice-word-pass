@@ -82,6 +82,14 @@ export interface GenerationServiceObserver {
   onModelFailed?: () => void;
   onAiAuthCircuitStateChanged?: (state: AiAuthCircuitSnapshot) => void;
   onProcessStarted?: (payload: { taskId: string; requested: number }) => void;
+  onProcessItemProgress?: (payload: {
+    taskId: string;
+    itemIndex: number;
+    requested: number;
+    status: "started" | "created" | "duplicate" | "failed";
+    durationMs?: number;
+    error?: string;
+  }) => void;
   onProcessCompleted?: (snapshot: GenerationProcessSnapshot) => void;
   onBatchCompleted?: (result: BatchGenerationResult) => void;
   onOutboundRequest?: AiEngineClientObserver["onOutboundRequest"];
@@ -118,7 +126,7 @@ export interface GenerationProcessInput extends GenerateInput {
 }
 
 /** Progress and result snapshot of an ongoing or completed generation process. */
-export interface GenerationProcessSnapshot extends SharedGenerationProcessSnapshot {}
+export type GenerationProcessSnapshot = SharedGenerationProcessSnapshot;
 
 interface ResolvedGenerateInput extends GenerateInput {
   query: string;
@@ -193,7 +201,7 @@ interface StoredGameModel {
   createdAt: Date;
 }
 
-interface GenerationProcessTask extends SharedGenerationProcessTask {}
+type GenerationProcessTask = SharedGenerationProcessTask;
 
 const PROMPT_VARIANTS = [
   "fundamentals",
@@ -656,6 +664,15 @@ export class GenerationService {
       const concurrency = Math.min(3, input.count);
 
       const processOne = async (index: number): Promise<void> => {
+        const itemStartedAt = Date.now();
+        task.updatedAt = new Date().toISOString();
+        this.observer?.onProcessItemProgress?.({
+          taskId: task.taskId,
+          itemIndex: index + 1,
+          requested: task.requested,
+          status: "started"
+        });
+
         const resolved = this.buildResolvedInput(index, category);
         const itemCount = this.resolveRequestedItemCount(input) ?? resolved.numQuestions;
         const payload: ResolvedGenerateInput = {
@@ -672,17 +689,40 @@ export class GenerationService {
           if (result.stored) {
             task.created += 1;
             task.generatedItems.push(result.responsePayload);
+            this.observer?.onProcessItemProgress?.({
+              taskId: task.taskId,
+              itemIndex: index + 1,
+              requested: task.requested,
+              status: "created",
+              durationMs: Date.now() - itemStartedAt
+            });
           } else {
             task.duplicates += 1;
             if (result.duplicateReason === "content") {
               task.duplicateByContent += 1;
             }
+            this.observer?.onProcessItemProgress?.({
+              taskId: task.taskId,
+              itemIndex: index + 1,
+              requested: task.requested,
+              status: "duplicate",
+              durationMs: Date.now() - itemStartedAt
+            });
           }
         } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : "Generation failed";
           task.failed += 1;
           if (task.errors.length < 25) {
-            task.errors.push(error instanceof Error ? error.message : "Generation failed");
+            task.errors.push(errorMessage);
           }
+          this.observer?.onProcessItemProgress?.({
+            taskId: task.taskId,
+            itemIndex: index + 1,
+            requested: task.requested,
+            status: "failed",
+            durationMs: Date.now() - itemStartedAt,
+            error: errorMessage
+          });
         }
 
         task.processed += 1;

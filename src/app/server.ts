@@ -24,7 +24,12 @@ async function buildServer() {
     onModelDuplicate: (reason) => metrics.recordGenerationDuplicate(reason),
     onModelFailed: () => metrics.recordGenerationFailed(),
     onAiAuthCircuitStateChanged: (state) => metrics.recordAiAuthCircuitState(state),
-    onProcessStarted: ({ requested }) => metrics.recordGenerationProcessStarted(requested),
+    onProcessStarted: ({ taskId, requested }) => metrics.recordGenerationProcessStarted(requested, taskId),
+    onProcessItemProgress: (payload) => metrics.recordLog(
+      payload.status === "failed" ? "error" : "info",
+      "generation_process_item_progress",
+      payload
+    ),
     onProcessCompleted: (snapshot) => metrics.recordGenerationProcessCompleted(snapshot),
     onBatchCompleted: (result) => metrics.recordBatch(result),
     onOutboundRequest: (metric) => metrics.recordOutboundRequest(metric)
