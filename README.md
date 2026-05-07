@@ -1,6 +1,6 @@
 # microservice-wordpass
 
-Last updated: 2026-05-03.
+Last updated: 2026-05-08.
 
 [![codecov](https://codecov.io/gh/AxiomNode/microservice-wordpass/branch/main/graph/badge.svg)](https://codecov.io/gh/AxiomNode/microservice-wordpass)
 
@@ -11,6 +11,8 @@ TypeScript microservice for word-pass generation and persistence.
 `microservice-wordpass` is the word-pass game domain service responsible for generation orchestration, persistence of generated models, and retrieval APIs tailored to the word-pass gameplay domain.
 
 It depends on `ai-engine` for generation but owns domain validation, persistence, and retrieval behavior.
+
+Current platform status: this service participates in the CI-gated image build and automatic staging rollout chain. Generated word-pass rows should remain validated before persistence and reusable through inventory/catalog routes.
 
 ## Runtime role
 
