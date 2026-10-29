@@ -1104,3 +1104,27 @@ describe("GenerationService", () => {
     expect(serviceAny.extractAiEngineStatusCode(new Error("plain network error"))).toBeNull();
   });
 });
+
+describe("GenerationService content signature helpers", () => {
+  it("detects generic frequency hints", () => {
+    const service = new GenerationService(createConfig()) as any;
+    expect(service.isGenericWordpassHint("A Frequent Real Word")).toBe(true);
+    expect(service.isGenericWordpassHint("FrequencyWords list")).toBe(true);
+    expect(service.isGenericWordpassHint("Word frequency table")).toBe(true);
+    expect(service.isGenericWordpassHint("frequent term")).toBe(true);
+    expect(service.isGenericWordpassHint("A tool for cutting wood")).toBe(false);
+  });
+
+  it("falls back to the supplied text, then to a constant, when the payload has no hints", () => {
+    const service = new GenerationService(createConfig()) as any;
+    expect(service.buildPrimaryWordpassText({}, "  fallback text  ")).toBe("fallback text");
+    expect(service.buildPrimaryWordpassText({}, "   ")).toBe("word-pass");
+  });
+
+  it("returns no primary signature for empty or non-object payloads", () => {
+    const service = new GenerationService(createConfig()) as any;
+    expect(service.extractPrimaryContentSignature("quiz", null)).toBeNull();
+    expect(service.extractPrimaryContentSignature("quiz", {})).toBeNull();
+    expect(service.extractPrimaryContentSignature("word-pass", {})).toBeNull();
+  });
+});

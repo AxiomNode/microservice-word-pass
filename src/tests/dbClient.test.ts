@@ -11,7 +11,7 @@ vi.mock("@prisma/client", () => ({
 describe("db client", () => {
   it("creates a shared PrismaClient singleton", async () => {
     const instance = { label: "prisma-singleton" };
-    prismaClientMock.mockImplementation(() => instance);
+    prismaClientMock.mockImplementation(function () { return instance; });
 
     const { prisma } = await import("../app/db/client.js");
 
