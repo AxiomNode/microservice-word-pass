@@ -12,7 +12,7 @@ TypeScript microservice for word-pass generation and persistence.
 
 It depends on `ai-engine` for generation but owns domain validation, persistence, and retrieval behavior.
 
-Current platform status: this service participates in the CI-gated image build and automatic staging rollout chain. Generated word-pass rows should remain validated before persistence and reusable through inventory/catalog routes.
+Current platform status: this service participates in the CI-gated image build chain (the automatic staging rollout is currently disabled). Generated word-pass rows should remain validated before persistence and reusable through inventory/catalog routes.
 
 ## Runtime role
 
@@ -47,7 +47,7 @@ Detailed generation semantics, repair behavior, and inventory handling are docum
 
 ### Stack
 
-- Node.js 20+
+- Node.js 22+
 - Fastify
 - Zod
 - Prisma
@@ -116,7 +116,7 @@ Primary consumers:
 
 ### CI/CD and rollout note
 
-CI, smoke checks, and staging rollout behavior are documented in `docs/operations/README.md` and `../docs/operations/cicd-workflow-map.md`.
+CI, smoke checks, and image publishing are documented in `docs/operations/README.md` and `../docs/operations/cicd-workflow-map.md`.
 
 ### Resilience notes
 
