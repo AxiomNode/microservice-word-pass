@@ -37,12 +37,12 @@ Validate:
 - one generation request when downstream AI is available
 - one random-model read to confirm persistence path and retrieval path both work
 
-## Automated CI/CD path
+## CI/CD path
 
 1. Push to `main` in this repository.
 2. `.github/workflows/ci.yml` dispatches `platform-infra` build for `microservice-wordpass`.
 3. `platform-infra` publishes the image to GHCR.
-4. `platform-infra` deploy workflow applies rollout to `stg`.
+4. Nothing deploys the image automatically: the `platform-infra` staging rollout is currently disabled because its target host no longer exists.
 
 ## Common failure patterns
 
