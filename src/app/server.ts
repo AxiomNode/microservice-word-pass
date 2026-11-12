@@ -1,6 +1,6 @@
 import "dotenv/config";
 
-import { buildGameServer, startGameServer } from "@axiomnode/shared-sdk-client";
+import { buildGameServer } from "@axiomnode/shared-sdk-client";
 
 import { loadConfig } from "./config.js";
 import { prisma } from "./db/client.js";
@@ -11,6 +11,7 @@ import { ModelGenerationJob } from "./services/modelGenerationJob.js";
 import { RuntimeGenerationWorker } from "./services/runtimeGenerationWorker.js";
 import { monitoringRoutes } from "./routes/monitoring.js";
 import { ServiceMetrics } from "./services/serviceMetrics.js";
+import { startListeningFirst } from "./services/startup.js";
 
 /** @module server - Fastify application bootstrap, middleware setup, and main entrypoint. */
 
@@ -43,7 +44,7 @@ async function buildServer() {
     runtimeGenerationWorker,
     metrics,
     disconnect: () => prisma.$disconnect(),
-    registerHealthRoutes: healthRoutes,
+    registerHealthRoutes: (app) => healthRoutes(app, generationService),
     registerGameRoutes: gameRoutes,
     registerMonitoringRoutes: monitoringRoutes,
   });
@@ -51,7 +52,9 @@ async function buildServer() {
 
 /** Starts the server, initializes catalogs, and launches the periodic generation job. */
 async function main() {
-  await startGameServer({
+  // Listen first; catalogs are refreshed in the background (with the same ai-engine retries) and /health
+  // reports `catalogReady` honestly instead of blocking startup while ai-engine is unreachable.
+  await startListeningFirst({
     ...(await buildServer()),
     gameType: "word-pass",
   });

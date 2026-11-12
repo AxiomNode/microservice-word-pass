@@ -149,6 +149,21 @@ export interface HistoryFilters {
   status?: string;
 }
 
+/** One (category id, category name) bucket of the history insights aggregate. */
+export interface HistoryInsightsCategory {
+  categoryId: string | null;
+  categoryName: string | null;
+  count: number;
+  /** ISO timestamp of the newest row in the bucket (lets callers replicate "newest row wins" naming). */
+  latestCreatedAt: string | null;
+}
+
+/** Server-side aggregate behind the Backoffice history insights (no row payloads). */
+export interface HistoryInsightsResult {
+  total: number;
+  categories: HistoryInsightsCategory[];
+}
+
 export interface HistoryPageResult {
   items: StoredGameModel[];
   total: number;
@@ -282,6 +297,11 @@ export class GenerationService {
       this.catalogUpdatedAt = new Date().toISOString();
     }
     return this.getCatalogSnapshot();
+  }
+
+  /** True once the catalogs came from ai-engine (false while the local fallback is in use). */
+  isCatalogReady(): boolean {
+    return this.catalogSource === "ai-engine";
   }
 
   async runAiAuthSmokeCheck(): Promise<{ ok: true } | { ok: false; reason: string }> {
@@ -577,9 +597,10 @@ export class GenerationService {
 
     const poolSize = resolveGameRandomModelsPoolSize(filters.count);
 
+    // Step 1: sample from a bounded pool of ids only (no requestJson/responseJson blobs).
     const candidates = await prisma.gameGeneration.findMany({
       where,
-      select: GenerationService.storedModelSelect,
+      select: { id: true },
       orderBy: { createdAt: "desc" },
       take: poolSize
     });
@@ -588,7 +609,17 @@ export class GenerationService {
       return [];
     }
 
-    const selected = pickRandomGameModels(candidates, filters.count);
+    const pickedIds = pickRandomGameModels(candidates, filters.count).map((item) => item.id);
+
+    // Step 2: load full rows only for the handful of winners and keep the random order.
+    const rows = await prisma.gameGeneration.findMany({
+      where: { id: { in: pickedIds } },
+      select: GenerationService.storedModelSelect
+    });
+    const rowById = new Map(rows.map((row) => [row.id, row] as const));
+    const selected = pickedIds
+      .map((id) => rowById.get(id))
+      .filter((row): row is NonNullable<typeof row> => row !== undefined);
     return this.mapStoredModelsSafely(selected).slice(0, filters.count);
   }
 
@@ -650,6 +681,40 @@ export class GenerationService {
       total,
       page: normalizedPage,
       pageSize: normalizedPageSize,
+    };
+  }
+
+  /**
+   * Category distribution of the history rows matching the same filters as {@link historyPage},
+   * computed with a single GROUP BY instead of paging every row to the caller.
+   */
+  async historyInsights(filters?: HistoryFilters): Promise<HistoryInsightsResult> {
+    const where = buildGameHistoryWhere(
+      "word-pass",
+      filters,
+      (categoryId) => this.getCategoryOrThrow(categoryId).id,
+      { includeStatus: true }
+    );
+
+    const groups = await prisma.gameGeneration.groupBy({
+      by: ["categoryId", "categoryName"],
+      where,
+      _count: { _all: true },
+      _max: { createdAt: true },
+    });
+
+    const categories = groups
+      .map((group) => ({
+        categoryId: group.categoryId,
+        categoryName: group.categoryName,
+        count: group._count._all,
+        latestCreatedAt: group._max.createdAt ? group._max.createdAt.toISOString() : null,
+      }))
+      .sort((left, right) => (right.latestCreatedAt ?? "").localeCompare(left.latestCreatedAt ?? ""));
+
+    return {
+      total: categories.reduce((sum, item) => sum + item.count, 0),
+      categories,
     };
   }
 

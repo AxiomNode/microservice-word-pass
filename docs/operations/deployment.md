@@ -32,7 +32,7 @@ docker compose down
 
 Validate:
 
-- `GET /health`
+- `GET /health` (always HTTP 200 once the port is bound; `catalogReady: false` means ai-engine catalogs are still loading in the background or ai-engine is unreachable and the local fallback catalogs are in use)
 - private-docs protection if it is part of the release safety path
 - one generation request when downstream AI is available
 - one random-model read to confirm persistence path and retrieval path both work
