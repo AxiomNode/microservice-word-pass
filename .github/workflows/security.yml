@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 # Supersede in-flight runs of the same ref; only for pull requests so a push to
-# main is never cancelled half-way (it may dispatch the image build).
+# main is never cancelled half-way.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}

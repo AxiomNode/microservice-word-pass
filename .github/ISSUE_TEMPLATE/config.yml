@@ -1,1 +1,5 @@
 blank_issues_enabled: false
+contact_links:
+  - name: This repository is archived - open the issue in microservice-games
+    url: https://github.com/AxiomNode/microservice-games/issues/new/choose
+    about: The word-pass service moved to AxiomNode/microservice-games.

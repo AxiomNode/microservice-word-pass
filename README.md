@@ -1,140 +1,18 @@
-# microservice-wordpass
+# microservice-wordpass (archived)
 
-Last updated: 2026-05-08.
+> **This repository is archived and no longer maintained.** The word-pass service lives in
+> [AxiomNode/microservice-games](https://github.com/AxiomNode/microservice-games) (formerly `microservice-quizz`).
+> Open issues and pull requests there.
 
-[![codecov](https://codecov.io/gh/AxiomNode/microservice-wordpass/branch/main/graph/badge.svg)](https://codecov.io/gh/AxiomNode/microservice-wordpass)
+## Where things went
 
-TypeScript microservice for word-pass generation and persistence.
+| Before (this repo) | Now |
+|---|---|
+| Word-pass service code (`src/app`) | One code base in `microservice-games`; the game is chosen by `GAME_TYPE=word-pass` and its rules live in `src/app/games/wordpass.ts` |
+| `microservice-wordpass-api` image | The merged `microservice-games-api` image, deployed as the same `microservice-wordpass-api` Deployment and Service (URLs, port 7100 and the BFF/gateway settings did not change) |
+| Own PostgreSQL (`wordpassdb`) | The shared quiz database; every row carries its `gameType` |
+| Own CI and image dispatch | The CI of `microservice-games` |
 
-## Responsibility
+## What stays here
 
-`microservice-wordpass` is the word-pass game domain service responsible for generation orchestration, persistence of generated models, and retrieval APIs tailored to the word-pass gameplay domain.
-
-It depends on `ai-engine` for generation but owns domain validation, persistence, and retrieval behavior.
-
-Current platform status: this service participates in the CI-gated image build chain (the automatic staging rollout is currently disabled). Generated word-pass rows should remain validated before persistence and reusable through inventory/catalog routes.
-
-## Runtime role
-
-### Main responsibilities
-
-- Request word-pass generation from `ai-engine`.
-- Persist generated word-pass models and history in PostgreSQL.
-- Expose generation and catalog endpoints for BFF consumers.
-
-### Ownership boundary
-
-`microservice-wordpass` owns word-pass-domain correctness even when generation originates in `ai-engine`.
-
-That includes:
-
-- request shaping for word-pass generation
-- validation of letters, hints, and topic coherence
-- persistence of valid domain payloads
-- retrieval semantics for reusable stored models
-
-## Runtime surface
-
-### Primary use cases
-
-- request word-pass generation for a category and language
-- ingest externally generated word-pass payloads
-- retrieve reusable stored models
-- inspect historical generated artifacts
-- expose private docs and health endpoints used during release verification
-
-Detailed generation semantics, repair behavior, and inventory handling are documented in the word-pass capability dossier so this README can stay at repository level.
-
-### Stack
-
-- Node.js 22+
-- Fastify
-- Zod
-- Prisma
-- PostgreSQL
-- Vitest
-
-## Local setup
-
-### Project layout
-
-- `src/`: service code, Prisma schema, tests, and Docker assets.
-- `docs/`: architecture, guides, and operations docs.
-
-### Local development
-
-```bash
-cd src
-cp .env.example .env
-npm install
-npm run db:push
-npm run dev
-```
-
-Inject real secrets from the private `secrets` repository when needed:
-
-```bash
-node scripts/prepare-runtime-secrets.mjs dev
-```
-
-### Route note
-
-This service owns word-pass generation, ingest, random inventory, grouped inventory, maintenance, and history routes. Use `docs/architecture/README.md` and the word-pass inventory capability dossier for the concrete contract inventory.
-
-## Dependencies and contracts
-
-### Dependency model
-
-Primary infrastructure dependency:
-
-- PostgreSQL
-
-Primary service dependencies:
-
-- `ai-engine-api`
-- `ai-engine-stats` via shared instrumentation paths where applicable
-
-Primary consumers:
-
-- `bff-mobile`
-- `bff-backoffice`
-
-### Private docs
-
-- Route: `/private/docs`
-- JSON: `/private/docs/json`
-- Auth headers: `X-Private-Docs-Token` or `Authorization: Bearer <token>`
-
-## Documentation
-
-- `docs/README.md`
-- `docs/architecture/README.md`
-- `docs/guides/README.md`
-- `docs/operations/README.md`
-
-## Deployment and operations notes
-
-### CI/CD and rollout note
-
-CI, smoke checks, and image publishing are documented in `docs/operations/README.md` and `../docs/operations/cicd-workflow-map.md`.
-
-### Resilience notes
-
-- This service should degrade gracefully when invalid persisted generated rows are encountered.
-- Retry and timeout behavior for `ai-engine` calls should remain explicit in configuration and test coverage.
-- Async generation process items use `GAME_GENERATION_ITEM_TIMEOUT_MS` and `GAME_GENERATION_ITEM_RETRY_MAX_ATTEMPTS` so blocked LLM calls become explicit `timeout` item progress events instead of indefinite `running` tasks.
-- Release confidence depends on both repository validation and central deployment validation.
-
-### Failure boundaries
-
-- upstream AI returns malformed or weak domain content
-- generation request times out or is rejected because AI runtime is busy
-- persistence fails after successful validation
-- stored invalid rows degrade random selection or history endpoints
-
-## References
-
-- `docs/architecture/`
-- `docs/operations/`
-- `../docs/guides/capabilities/domain/wordpass-inventory-and-generation.md`
-- `../docs/operations/cicd-workflow-map.md`
+The final state of the word-pass service before the merge is kept as read-only history (last functional change: `perf: aggregate history insights, id-sampled random models, listen-before-catalogs`). Do not build or deploy from this repository.

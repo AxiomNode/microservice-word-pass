@@ -1,3 +1,6 @@
+> **Archived: this service moved to [AxiomNode/microservice-games](https://github.com/AxiomNode/microservice-games).**
+> One code base now runs both games (quiz and word-pass), selected by `GAME_TYPE`. The documentation below describes the service as it was before the merge.
+
 # microservice-wordpass docs
 
 Last updated: 2026-05-08.
@@ -32,4 +35,4 @@ This local docs folder explains the concrete implementation surface of `microser
 ## CI/CD reference
 
 - Repository workflow: `.github/workflows/ci.yml`.
-- Push to `main` dispatches `platform-infra` image build for `microservice-wordpass`.
+- Historical: pushes to `main` used to dispatch the `platform-infra` image build; that dispatch was removed when the repository was archived.
