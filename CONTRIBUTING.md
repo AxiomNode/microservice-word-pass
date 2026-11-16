@@ -1,3 +1,6 @@
+> **Archived: this service moved to [AxiomNode/microservice-games](https://github.com/AxiomNode/microservice-games).**
+> One code base now runs both games (quiz and word-pass), selected by `GAME_TYPE`. Contribute there; this repository takes no further changes.
+
 # Contributing
 
 ## Branching model

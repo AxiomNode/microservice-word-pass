@@ -39,10 +39,7 @@ Validate:
 
 ## CI/CD path
 
-1. Push to `main` in this repository.
-2. `.github/workflows/ci.yml` dispatches `platform-infra` build for `microservice-wordpass`.
-3. `platform-infra` publishes the image to GHCR.
-4. Nothing deploys the image automatically: the `platform-infra` staging rollout is currently disabled because its target host no longer exists.
+Historical. This repository is archived: pushes no longer dispatch a `platform-infra` image build. The `microservice-wordpass-api` Deployment runs the merged `microservice-games-api` image with `GAME_TYPE=word-pass`, built from `microservice-games`.
 
 ## Common failure patterns
 
